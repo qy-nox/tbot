@@ -16,7 +16,10 @@ from config.settings import Settings
 from core.data_fetcher import DataFetcher
 from core.technical_analyzer import TechnicalAnalyzer
 from core.sentiment_analyzer import SentimentAnalyzer
+from core.multi_timeframe import MultiTimeframeAnalyzer
+from core.onchain_analyzer import OnChainAnalyzer
 from strategies.strategy_engine import StrategyEngine
+from strategies.binary_strategy import BinaryStrategyEngine
 from risk_management.position_sizer import PositionSizer
 from notifications.telegram_notifier import TelegramNotifier
 from utils.database import init_db, get_session, Signal as SignalModel
@@ -34,8 +37,23 @@ class TradingBot:
         self.analyzer = TechnicalAnalyzer()
         self.sentiment = SentimentAnalyzer()
         self.strategy = StrategyEngine()
+        self.binary_strategy = BinaryStrategyEngine(
+            expiry=Settings.BINARY_EXPIRY_SECONDS
+        )
+        self.mtf = MultiTimeframeAnalyzer()
+        self.onchain = OnChainAnalyzer()
         self.sizer = PositionSizer()
         self.notifier = TelegramNotifier()
+
+        # ML engine (lazy-loaded to avoid import errors if deps missing)
+        self.ml_engine = None
+        if Settings.ML_ENABLED:
+            try:
+                from core.ml_engine import MLEngine
+                self.ml_engine = MLEngine()
+                logger.info("ML engine loaded (cached=%s)", self.ml_engine.is_ready)
+            except ImportError:
+                logger.warning("ML dependencies not installed – ML engine disabled")
 
         init_db()
         logger.info("Database initialised")
@@ -57,11 +75,45 @@ class TradingBot:
         if not analysis:
             return
 
-        # 3. Sentiment analysis (best-effort)
+        # 3. Multi-timeframe analysis (best-effort)
+        mtf_result = None
+        try:
+            mtf_data = {}
+            for tf in Settings.MTF_TIMEFRAMES:
+                limit = Settings.MTF_CANDLE_LIMITS.get(tf, 200)
+                tf_df = self.data_fetcher.fetch_ohlcv(pair, timeframe=tf, limit=limit)
+                if not tf_df.empty:
+                    mtf_data[tf] = tf_df
+            if mtf_data:
+                mtf_result = self.mtf.analyse(mtf_data)
+        except Exception:
+            logger.debug("Multi-timeframe analysis failed for %s (non-fatal)", pair)
+
+        # 4. Sentiment analysis (best-effort)
         articles = self.data_fetcher.fetch_crypto_news()
         sentiment_result = self.sentiment.analyse_articles(articles)
 
-        # 4. Strategy evaluation
+        # 5. On-chain analysis (best-effort)
+        onchain_sentiment = 0.0
+        try:
+            asset_name = pair.split("/")[0].lower()
+            whales = self.onchain.get_whale_transactions(asset_name)
+            onchain_sentiment = self.onchain.analyse_whale_sentiment(whales)
+        except Exception:
+            logger.debug("On-chain analysis failed for %s (non-fatal)", pair)
+
+        # 6. ML prediction (best-effort)
+        ml_boost = 0.0
+        if self.ml_engine and self.ml_engine.is_ready:
+            try:
+                prediction = self.ml_engine.predict(df)
+                if prediction and prediction.direction != "HOLD":
+                    ml_boost = prediction.confidence * 0.1  # small boost
+                    logger.info("ML boost for %s: %+.2f (%s)", pair, ml_boost, prediction.direction)
+            except Exception:
+                logger.debug("ML prediction failed for %s (non-fatal)", pair)
+
+        # 7. Strategy evaluation
         signal = self.strategy.evaluate(
             pair=pair,
             analysis=analysis,
@@ -72,7 +124,19 @@ class TradingBot:
             logger.info("%s: no signal", pair)
             return
 
-        # 5. Position sizing
+        # Apply MTF alignment boost
+        if mtf_result and mtf_result.alignment == "ALIGNED":
+            signal.confidence = min(signal.confidence + 0.05, 1.0)
+            signal.reasons.append(f"MTF aligned ({mtf_result.dominant_trend})")
+
+        # Apply ML boost if direction agrees
+        if ml_boost > 0 and self.ml_engine:
+            prediction = self.ml_engine.predict(df)
+            if prediction and prediction.direction == signal.direction:
+                signal.confidence = min(signal.confidence + ml_boost, 1.0)
+                signal.reasons.append("ML ensemble confirms")
+
+        # 8. Position sizing
         plan = self.sizer.compute(
             pair=signal.pair,
             direction=signal.direction,
@@ -84,13 +148,13 @@ class TradingBot:
             logger.info("%s: position sizer blocked trade", pair)
             return
 
-        # 6. Store signal in database
+        # 9. Store signal in database
         self._store_signal(signal)
 
-        # 7. Send Telegram notification
+        # 10. Send Telegram notification
         self.notifier.send_signal(signal)
 
-        # 8. Store in platform & distribute to subscribers
+        # 11. Store in platform & distribute to subscribers
         self._platform_distribute(signal, analysis)
 
         logger.info(
@@ -101,16 +165,64 @@ class TradingBot:
             signal.confidence * 100,
         )
 
+    # ── Binary signal scan ──────────────────────────────────────────────
+
+    def scan_binary_pair(self, pair: str) -> None:
+        """Fetch short-term data and emit a binary CALL/PUT signal."""
+        logger.info("Binary scan %s …", pair)
+
+        df = self.data_fetcher.fetch_ohlcv(
+            pair,
+            timeframe=Settings.BINARY_TIMEFRAME,
+            limit=100,
+        )
+        if df.empty:
+            logger.warning("No binary data for %s – skipping", pair)
+            return
+
+        signal = self.binary_strategy.evaluate(pair, df)
+        if signal is None:
+            logger.info("%s: no binary signal", pair)
+            return
+
+        # Notify
+        self._send_binary_notification(signal)
+
+        # Store in platform
+        self._platform_distribute_binary(signal)
+
+        logger.info(
+            "Binary signal: %s %s @ %.4f (conf %.0f%%, %s, expiry %ds)",
+            signal.direction,
+            pair,
+            signal.entry_price,
+            signal.confidence * 100,
+            signal.strength,
+            signal.expiry_seconds,
+        )
+
     # ── Full scan across all pairs ──────────────────────────────────────
 
     def run_scan(self) -> None:
         """Scan every pair in the configured list."""
         logger.info("Starting scan cycle for %d pairs", len(Settings.TRADING_PAIRS))
+
+        # Crypto signals
         for pair in Settings.TRADING_PAIRS:
             try:
                 self.scan_pair(pair)
             except Exception:
                 logger.exception("Error scanning %s", pair)
+
+        # Binary signals
+        if Settings.BINARY_ENABLED:
+            logger.info("Starting binary scan for %d pairs", len(Settings.BINARY_PAIRS))
+            for pair in Settings.BINARY_PAIRS:
+                try:
+                    self.scan_binary_pair(pair)
+                except Exception:
+                    logger.exception("Error in binary scan for %s", pair)
+
         logger.info("Scan cycle complete")
 
     # ── Continuous loop ─────────────────────────────────────────────────
@@ -201,6 +313,65 @@ class TradingBot:
         except Exception:
             logger.exception("Platform distribution failed (non-fatal)")
 
+    # ── Binary notification ─────────────────────────────────────────────
+
+    def _send_binary_notification(self, signal) -> None:
+        """Send a formatted binary signal via Telegram."""
+        direction_emoji = "\U0001f7e2" if signal.direction == "CALL" else "\U0001f534"
+        expiry = signal.expiry_seconds
+        if expiry >= 60:
+            dur_str = f"{expiry // 60} min"
+        else:
+            dur_str = f"{expiry} sec"
+
+        text = (
+            f"\u26a1 <b>BINARY TRADING SIGNAL</b>\n\n"
+            f"<b>Pair:</b> {signal.pair}\n"
+            f"<b>Direction:</b> {direction_emoji} {signal.direction}\n"
+            f"<b>Entry:</b> {signal.entry_price:,.4f}\n"
+            f"<b>Expiry:</b> {dur_str}\n\n"
+            f"<b>Confidence:</b> {signal.confidence:.0%}\n"
+            f"<b>Strength:</b> {signal.strength}\n\n"
+            f"<b>Reason:</b> {'; '.join(signal.reasons)}"
+        )
+        self.notifier.send_message(text)
+
+    # ── Binary platform distribution ────────────────────────────────────
+
+    @staticmethod
+    def _platform_distribute_binary(signal) -> None:
+        """Store binary signal in the platform and distribute."""
+        try:
+            from signal_platform.models import SignalDirection, SignalType
+            from signal_platform.models import get_session as platform_session
+            from signal_platform.services.signal_service import SignalService
+            from signal_platform.services.distribution_service import DistributionService
+
+            db = platform_session()
+            try:
+                direction = (
+                    SignalDirection.BUY
+                    if signal.direction == "CALL"
+                    else SignalDirection.SELL
+                )
+                sig = SignalService.create_signal(
+                    db,
+                    signal_type=SignalType.BINARY,
+                    pair=signal.pair,
+                    direction=direction,
+                    entry_price=signal.entry_price,
+                    confidence=signal.confidence,
+                    strategy=signal.strategy_name,
+                    reason="; ".join(signal.reasons) if signal.reasons else "",
+                    binary_duration=signal.expiry_seconds,
+                    binary_direction=signal.direction,
+                )
+                DistributionService.distribute(db, sig)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Binary platform distribution failed (non-fatal)")
+
 
 # ── API server ──────────────────────────────────────────────────────────
 
@@ -210,13 +381,18 @@ def start_api() -> None:
     import os
     import uvicorn
     from signal_platform.models import init_db as platform_init
+    from signal_platform.api.app import app
+    from signal_platform.dashboard import router as dashboard_router
 
     platform_init()
+
+    # Mount the dashboard
+    app.include_router(dashboard_router)
 
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
     logger.info("Starting API server on %s:%d", host, port)
-    uvicorn.run("signal_platform.api.app:app", host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 # ── Entry point ─────────────────────────────────────────────────────────

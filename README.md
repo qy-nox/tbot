@@ -1,6 +1,6 @@
 # Professional Trading Signal Service Platform
 
-A production-ready SAAS platform for crypto and binary trading signal generation, distribution, and user management. Built on top of a modular trading bot with technical analysis, sentiment analysis, risk management, and backtesting.
+A production-ready SAAS platform for crypto and binary trading signal generation, distribution, and user management. Built on top of a modular trading bot with technical analysis, sentiment analysis, AI/ML prediction, on-chain analytics, multi-timeframe analysis, risk management, and backtesting.
 
 ## Platform Features
 
@@ -9,31 +9,39 @@ A production-ready SAAS platform for crypto and binary trading signal generation
 | **User Management** | Registration, JWT authentication, subscription tiers (Free / Premium / VIP), user profiles |
 | **Signal Types** | Crypto trading signals (Binance, Bybit, etc.) and binary trading signals (CALL/PUT) |
 | **Signal Quality** | Auto-grading (A+, A, B, C), confidence scoring, win-rate filtering, validity periods |
+| **AI/ML Engine** | 3-model voting ensemble (LightGBM + RandomForest + GradientBoosting), no GPU needed |
+| **Multi-Timeframe** | Simultaneous analysis of 5m, 1h, 4h timeframes with weighted consensus |
+| **On-Chain Data** | Whale tracking, exchange inflow/outflow, network metrics (free APIs) |
 | **Distribution** | Telegram groups & channels, Discord webhooks, email, API — with retry on failure |
 | **Performance** | Win rate (daily/weekly/monthly), ROI tracking, per-pair analytics, leaderboards |
 | **Subscriptions** | Tiered plans with payment tracking, billing history, expiry management |
+| **Web Dashboard** | Real-time signal dashboard, performance stats, mobile responsive |
 | **Admin Dashboard** | User management, signal management, revenue tracking, performance snapshots |
 | **Security** | JWT tokens, password hashing (bcrypt), audit logging, CORS |
-| **Bot Engine** | RSI, EMA, MACD, Bollinger Bands, ATR, ADX, Fibonacci, sentiment analysis, backtesting |
+| **Bot Engine** | RSI, EMA, MACD, Bollinger Bands, ATR, ADX, Fibonacci, supply/demand zones, order blocks |
 
 ## Project Structure
 
 ```
 tbot/
 ├── config/
-│   └── settings.py                  # Trading parameters & API config
+│   └── settings.py                  # Trading parameters, API config, ML/binary settings
 ├── core/
 │   ├── data_fetcher.py              # OHLCV, news, funding rates
-│   ├── technical_analyzer.py        # 10+ indicators, S/R, Fibonacci
-│   └── sentiment_analyzer.py        # TextBlob + VADER sentiment
+│   ├── technical_analyzer.py        # 10+ indicators, S/R, Fibonacci, supply/demand zones, order blocks
+│   ├── sentiment_analyzer.py        # TextBlob + VADER sentiment
+│   ├── multi_timeframe.py           # Multi-timeframe analysis (5m, 1h, 4h)
+│   ├── onchain_analyzer.py          # Whale tracking & on-chain metrics
+│   └── ml_engine.py                 # 3-model AI/ML ensemble (LightGBM, RF, GB)
 ├── strategies/
-│   └── strategy_engine.py           # Multi-indicator consensus
+│   ├── strategy_engine.py           # Crypto multi-indicator consensus
+│   └── binary_strategy.py           # Binary CALL/PUT signal generation
 ├── risk_management/
 │   └── position_sizer.py            # Position sizing, SL/TP, Kelly
 ├── backtesting/
 │   └── backtest_engine.py           # Vectorized backtesting
 ├── notifications/
-│   └── telegram_notifier.py         # Legacy Telegram integration
+│   └── telegram_notifier.py         # Telegram integration
 ├── utils/
 │   ├── database.py                  # Original SQLAlchemy models
 │   └── logger.py                    # Rotating file + console logging
@@ -41,6 +49,7 @@ tbot/
 │   ├── models.py                    # Extended DB (users, subscriptions, payments, signals, deliveries, audit)
 │   ├── auth.py                      # JWT authentication & password hashing
 │   ├── schemas.py                   # Pydantic request/response schemas
+│   ├── dashboard.py                 # Web dashboard (real-time stats)
 │   ├── api/
 │   │   └── app.py                   # FastAPI REST API (all routes)
 │   └── services/
@@ -137,6 +146,11 @@ python main.py --both
 | POST | `/api/admin/performance/snapshot` | Generate performance snapshot |
 
 Interactive API docs are available at `/docs` (Swagger UI) when the server is running.
+
+### Dashboard
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/dashboard/` | Real-time web dashboard (HTML) |
 
 ## Signal Types
 
@@ -236,6 +250,43 @@ print(f"Max Drawdown: {result.max_drawdown:.1%}")
 - Use environment variables or a secrets manager for API keys.
 - Always test with `TRADING_MODE=paper` before enabling live trading.
 - Start with small position sizes and monitor performance.
+
+## Advanced Features
+
+### AI/ML Prediction Engine
+The bot includes a 3-model voting ensemble that runs on CPU (no GPU needed):
+- **LightGBM** – fast gradient boosting (10x faster than XGBoost)
+- **Random Forest** – robust tree ensemble
+- **Gradient Boosting** – scikit-learn classic boosting
+
+Models are trained on ~20 engineered features (returns, volatility, volume ratios, RSI, MACD, EMA distances, candle patterns). Trained models are cached to disk for instant reloads.
+
+### Multi-Timeframe Analysis
+Analyses three timeframes simultaneously (5m, 1h, 4h) with weighted consensus:
+- Higher timeframes carry more weight (4h: 45%, 1h: 35%, 5m: 20%)
+- Full alignment boosts signal confidence by 5%
+- Conflicting timeframes reduce confidence by 30%
+
+### On-Chain & Whale Tracking
+Monitors blockchain activity using free public APIs:
+- Large BTC/ETH transactions (whale movements)
+- Exchange inflow/outflow classification (bearish/bullish)
+- Network hash rate, transaction counts, mempool size
+- On-chain sentiment scoring
+
+### Supply/Demand Zones & Order Blocks
+Advanced price action analysis:
+- **Supply zones** – areas where strong selling occurred (bearish pressure)
+- **Demand zones** – areas where strong buying occurred (bullish pressure)
+- **Bullish order blocks** – last bearish candle before a strong up-move
+- **Bearish order blocks** – last bullish candle before a strong down-move
+
+### Binary Trading Signals
+Full support for binary options platforms (IQ Option, Pocket Option):
+- Short-term CALL/PUT signals (30s to 5min expiry)
+- Fast indicators optimized for short timeframes (EMA 5/10/20)
+- Higher confidence threshold (70%+) for better win rates
+- Signal strength classification (STRONG / MODERATE / WEAK)
 
 ## License
 

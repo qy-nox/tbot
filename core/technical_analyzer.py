@@ -200,6 +200,115 @@ class TechnicalAnalyzer:
             return "DOWNTREND"
         return "SIDEWAYS"
 
+    # ── Supply / Demand Zones ──────────────────────────────────────────
+
+    def compute_supply_demand_zones(
+        self, df: pd.DataFrame, lookback: int = 50, strength: int = 3
+    ) -> dict[str, list[dict]]:
+        """Detect supply (resistance) and demand (support) zones.
+
+        A *demand zone* forms when a strong bullish candle follows a base
+        of narrow-range candles.  A *supply zone* forms on a strong bearish
+        candle after a similar base.
+
+        Returns ``{"demand": [...], "supply": [...]}`` where each entry is
+        ``{"low": float, "high": float}``.
+        """
+        demand_zones: list[dict] = []
+        supply_zones: list[dict] = []
+
+        recent = df.tail(lookback).reset_index(drop=True)
+        body = (recent["close"] - recent["open"]).abs()
+        avg_body = body.rolling(20).mean()
+
+        for i in range(strength, len(recent) - 1):
+            # Current candle body relative to recent average
+            if pd.isna(avg_body.iloc[i]) or avg_body.iloc[i] == 0:
+                continue
+
+            ratio = body.iloc[i] / avg_body.iloc[i]
+
+            # Demand zone: strong bullish candle (body > 1.5× average)
+            if recent["close"].iloc[i] > recent["open"].iloc[i] and ratio > 1.5:
+                base_low = recent["low"].iloc[max(0, i - strength) : i].min()
+                base_high = recent["open"].iloc[i]
+                demand_zones.append(
+                    {"low": float(base_low), "high": float(base_high)}
+                )
+
+            # Supply zone: strong bearish candle
+            if recent["close"].iloc[i] < recent["open"].iloc[i] and ratio > 1.5:
+                base_high = recent["high"].iloc[max(0, i - strength) : i].max()
+                base_low = recent["open"].iloc[i]
+                supply_zones.append(
+                    {"low": float(base_low), "high": float(base_high)}
+                )
+
+        logger.debug(
+            "Supply/Demand zones: %d demand, %d supply",
+            len(demand_zones),
+            len(supply_zones),
+        )
+        return {"demand": demand_zones, "supply": supply_zones}
+
+    # ── Order Block Identification ─────────────────────────────────────
+
+    def compute_order_blocks(
+        self, df: pd.DataFrame, lookback: int = 50, min_move_pct: float = 0.01
+    ) -> dict[str, list[dict]]:
+        """Identify bullish and bearish order blocks.
+
+        An *order block* is the last opposing candle before a strong
+        directional move.
+
+        Returns ``{"bullish_ob": [...], "bearish_ob": [...]}``.
+        """
+        bullish_obs: list[dict] = []
+        bearish_obs: list[dict] = []
+
+        recent = df.tail(lookback).reset_index(drop=True)
+
+        for i in range(1, len(recent) - 2):
+            curr_close = recent["close"].iloc[i]
+            next_close = recent["close"].iloc[i + 1]
+            prev_close = recent["close"].iloc[i - 1]
+
+            if curr_close == 0:
+                continue
+
+            move_pct = (next_close - curr_close) / curr_close
+
+            # Bullish OB: last bearish candle before a strong up-move
+            if (
+                recent["close"].iloc[i] < recent["open"].iloc[i]
+                and move_pct > min_move_pct
+            ):
+                bullish_obs.append({
+                    "low": float(recent["low"].iloc[i]),
+                    "high": float(recent["high"].iloc[i]),
+                    "open": float(recent["open"].iloc[i]),
+                    "close": float(recent["close"].iloc[i]),
+                })
+
+            # Bearish OB: last bullish candle before a strong down-move
+            if (
+                recent["close"].iloc[i] > recent["open"].iloc[i]
+                and move_pct < -min_move_pct
+            ):
+                bearish_obs.append({
+                    "low": float(recent["low"].iloc[i]),
+                    "high": float(recent["high"].iloc[i]),
+                    "open": float(recent["open"].iloc[i]),
+                    "close": float(recent["close"].iloc[i]),
+                })
+
+        logger.debug(
+            "Order blocks: %d bullish, %d bearish",
+            len(bullish_obs),
+            len(bearish_obs),
+        )
+        return {"bullish_ob": bullish_obs, "bearish_ob": bearish_obs}
+
     # ── All-in-one ─────────────────────────────────────────────────────
 
     def analyse(self, df: pd.DataFrame) -> dict:
@@ -216,6 +325,8 @@ class TechnicalAnalyzer:
         adx = self.compute_adx(df)
         fib = self.compute_fibonacci_levels(df)
         sr = self.compute_support_resistance(df)
+        sd_zones = self.compute_supply_demand_zones(df)
+        order_blocks = self.compute_order_blocks(df)
         trend = self.detect_trend(df)
 
         result = {
@@ -233,6 +344,8 @@ class TechnicalAnalyzer:
             "adx": adx.iloc[-1] if not adx.empty else None,
             "fibonacci": fib,
             "support_resistance": sr,
+            "supply_demand_zones": sd_zones,
+            "order_blocks": order_blocks,
             "trend": trend,
             "close": df["close"].iloc[-1],
         }
