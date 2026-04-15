@@ -1,130 +1,215 @@
-# Advanced Cryptocurrency Trading Signal Bot
+# Professional Trading Signal Service Platform
 
-A production-ready, modular cryptocurrency trading signal bot with technical analysis, sentiment analysis, risk management, backtesting, and Telegram notifications.
+A production-ready SAAS platform for crypto and binary trading signal generation, distribution, and user management. Built on top of a modular trading bot with technical analysis, sentiment analysis, risk management, and backtesting.
 
-## Features
+## Platform Features
 
-| Feature | Description |
-|---------|-------------|
-| **Data Fetching** | OHLCV, crypto news, economic calendar, funding rates, volume profiles via CCXT (200+ exchanges) |
-| **Technical Analysis** | RSI, EMA (20/50/200), MACD, Bollinger Bands, ATR, ADX, Fibonacci, support/resistance |
-| **Multi-Indicator Signals** | Consensus-based: at least 2 of 4 sub-strategies (RSI, MACD, EMA, Bollinger) must agree |
-| **Advanced Filtering** | Trend, momentum, volatility, ADX strength, high-impact news avoidance |
-| **Risk Management** | Auto position sizing, volatility-based SL, multiple TP levels, Kelly Criterion, max drawdown protection |
-| **Backtesting** | Vectorized engine with Sharpe ratio, Sortino ratio, max drawdown, profit factor, per-trade logs |
-| **Sentiment Analysis** | TextBlob + VADER with weighted aggregation and impact classification |
-| **Telegram Notifications** | Real-time signal alerts, performance reports, error notifications |
-| **Database** | SQLAlchemy ORM for signal, trade, and performance logging |
-| **Production Ready** | Error handling, rotating file logs, environment-variable config, async-capable |
+| Category | Features |
+|----------|----------|
+| **User Management** | Registration, JWT authentication, subscription tiers (Free / Premium / VIP), user profiles |
+| **Signal Types** | Crypto trading signals (Binance, Bybit, etc.) and binary trading signals (CALL/PUT) |
+| **Signal Quality** | Auto-grading (A+, A, B, C), confidence scoring, win-rate filtering, validity periods |
+| **Distribution** | Telegram groups & channels, Discord webhooks, email, API — with retry on failure |
+| **Performance** | Win rate (daily/weekly/monthly), ROI tracking, per-pair analytics, leaderboards |
+| **Subscriptions** | Tiered plans with payment tracking, billing history, expiry management |
+| **Admin Dashboard** | User management, signal management, revenue tracking, performance snapshots |
+| **Security** | JWT tokens, password hashing (bcrypt), audit logging, CORS |
+| **Bot Engine** | RSI, EMA, MACD, Bollinger Bands, ATR, ADX, Fibonacci, sentiment analysis, backtesting |
 
 ## Project Structure
 
 ```
 tbot/
 ├── config/
-│   ├── __init__.py
-│   └── settings.py              # All configuration & trading parameters
+│   └── settings.py                  # Trading parameters & API config
 ├── core/
-│   ├── __init__.py
-│   ├── data_fetcher.py          # OHLCV, news, funding rates, volume profiles
-│   ├── technical_analyzer.py    # RSI, EMA, MACD, BB, ATR, ADX, Fibonacci, S/R
-│   └── sentiment_analyzer.py    # TextBlob + VADER sentiment
-├── risk_management/
-│   ├── __init__.py
-│   └── position_sizer.py        # Position sizing, SL/TP, Kelly, drawdown
-├── backtesting/
-│   ├── __init__.py
-│   └── backtest_engine.py       # Vectorized backtest with full metrics
+│   ├── data_fetcher.py              # OHLCV, news, funding rates
+│   ├── technical_analyzer.py        # 10+ indicators, S/R, Fibonacci
+│   └── sentiment_analyzer.py        # TextBlob + VADER sentiment
 ├── strategies/
-│   ├── __init__.py
-│   └── strategy_engine.py       # Multi-indicator consensus + filters
+│   └── strategy_engine.py           # Multi-indicator consensus
+├── risk_management/
+│   └── position_sizer.py            # Position sizing, SL/TP, Kelly
+├── backtesting/
+│   └── backtest_engine.py           # Vectorized backtesting
 ├── notifications/
-│   ├── __init__.py
-│   └── telegram_notifier.py     # Telegram bot integration
+│   └── telegram_notifier.py         # Legacy Telegram integration
 ├── utils/
-│   ├── __init__.py
-│   ├── database.py              # SQLAlchemy models & helpers
-│   └── logger.py                # Rotating file + console logging
-├── main.py                      # Entry point – bot loop
-├── requirements.txt             # Python dependencies
-├── .env.example                 # Environment variable template
-├── .gitignore
+│   ├── database.py                  # Original SQLAlchemy models
+│   └── logger.py                    # Rotating file + console logging
+├── signal_platform/                 # ── SAAS Platform ──
+│   ├── models.py                    # Extended DB (users, subscriptions, payments, signals, deliveries, audit)
+│   ├── auth.py                      # JWT authentication & password hashing
+│   ├── schemas.py                   # Pydantic request/response schemas
+│   ├── api/
+│   │   └── app.py                   # FastAPI REST API (all routes)
+│   └── services/
+│       ├── user_service.py          # User registration, auth, profiles
+│       ├── signal_service.py        # Signal creation, grading, quality
+│       ├── subscription_service.py  # Plans, payments, billing
+│       ├── distribution_service.py  # Multi-channel signal delivery
+│       └── performance_service.py   # Analytics, win rates, leaderboards
+├── main.py                          # Entry point (bot / API / both)
+├── requirements.txt
+├── .env.example
 └── README.md
 ```
 
 ## Quick Start
 
-### 1. Clone the repository
+### 1. Clone & install
 
 ```bash
 git clone https://github.com/qy-nox/tbot.git
 cd tbot
-```
-
-### 2. Create a virtual environment
-
-```bash
 python -m venv venv
-source venv/bin/activate   # Linux/macOS
-venv\Scripts\activate      # Windows
-```
-
-### 3. Install dependencies
-
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 2. Configure
 
 ```bash
 cp .env.example .env
+# Edit .env with your API keys, JWT_SECRET, etc.
 ```
 
-Edit `.env` with your API keys:
-
-| Variable | Description |
-|----------|-------------|
-| `BINANCE_API_KEY` | Binance API key |
-| `BINANCE_API_SECRET` | Binance API secret |
-| `FINNHUB_API_KEY` | Finnhub API key (for news) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
-| `TRADING_MODE` | `paper` (default) or `live` |
-| `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-
-### 5. Initialise the database
+### 3. Run
 
 ```bash
-python -c "from utils.database import init_db; init_db()"
-```
+# Start the REST API server only
+python main.py --api
 
-### 6. Run the bot
-
-```bash
+# Start the trading bot scanner only
 python main.py
+
+# Start both (API + bot scanner)
+python main.py --both
 ```
 
-## Signal Example
+## API Endpoints
 
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register a new user |
+| POST | `/api/auth/login` | Login → JWT tokens |
+| POST | `/api/auth/refresh` | Refresh access token |
+
+### User Profile
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users/me` | Get current user profile |
+| PATCH | `/api/users/me` | Update profile (email, timezone, Telegram ID, etc.) |
+
+### Signals
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/signals` | Create & distribute a signal (admin) |
+| GET | `/api/signals` | List signals (filter by type, pair, grade) |
+| GET | `/api/signals/{id}` | Get signal details |
+| PATCH | `/api/signals/{id}/result` | Update signal outcome (admin) |
+| GET | `/api/signals/{id}/deliveries` | Delivery status per channel (admin) |
+
+### Performance
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/performance/overview` | Overall win rate, PnL, signal counts |
+| GET | `/api/performance/pairs` | Per-pair performance breakdown |
+| GET | `/api/performance/leaderboard` | Top pairs by win rate |
+| GET | `/api/performance/win-rates` | Win rates for 1d, 7d, 30d |
+
+### Subscriptions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/subscriptions/plans` | List subscription plans |
+| POST | `/api/subscriptions/payments` | Create a payment |
+| POST | `/api/subscriptions/payments/{id}/confirm` | Confirm payment (admin) |
+| GET | `/api/subscriptions/billing` | Billing history |
+
+### Admin
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/dashboard` | Dashboard stats (users, revenue, signals) |
+| GET | `/api/admin/users` | List all users |
+| PATCH | `/api/admin/users/{id}` | Update user (tier, active, admin) |
+| POST | `/api/admin/deliveries/retry` | Retry failed deliveries |
+| POST | `/api/admin/performance/snapshot` | Generate performance snapshot |
+
+Interactive API docs are available at `/docs` (Swagger UI) when the server is running.
+
+## Signal Types
+
+### Crypto Trading Signals
 ```
-🚀 TRADING SIGNAL
+🚀 CRYPTO TRADING SIGNAL [A]
 
 Pair: BTC/USDT
 Direction: BUY
-Entry: $42,500.0000
+Entry: $42,500.00
 
 Targets:
-  TP1: $43,000.0000
-  TP2: $43,500.0000
-  TP3: $44,000.0000
+├─ TP1: $43,000.00
+├─ TP2: $43,500.00
+└─ TP3: $44,000.00
 
-Stop Loss: $42,000.0000
+Stop Loss: $42,000.00
+R/R Ratio: 1:1.0
+
 Confidence: 85%
-Trend: UPTREND
-
-Reason: RSI oversold (28.5); MACD bullish crossover; EMA bullish alignment (20>50>200)
+Reason: RSI oversold, BB lower band touch, EMA crossover
+Valid Until: 2025-01-15 18:00 UTC
 ```
+
+### Binary Trading Signals
+```
+⚡ BINARY TRADING SIGNAL [A]
+
+Pair: EUR/USD
+Direction: 🟢 CALL
+Entry: $1.09
+Duration: 5 min
+
+Confidence: 78%
+Reason: RSI oversold bounce, support level
+Valid Until: 2025-01-15 16:10 UTC
+```
+
+## Signal Grades
+
+| Grade | Criteria | Access |
+|-------|----------|--------|
+| **A+** | Confidence ≥ 85% AND pair win-rate ≥ 70% | Free, Premium, VIP |
+| **A** | Confidence ≥ 75% OR pair win-rate ≥ 60% | Free, Premium, VIP |
+| **B** | Confidence ≥ 60% | Premium, VIP |
+| **C** | Below thresholds | VIP only |
+
+## Subscription Tiers
+
+| Plan | Price/mo | Signals/day | Features |
+|------|----------|-------------|----------|
+| **Free** | $0 | 3 | Crypto signals, Telegram, basic analytics |
+| **Premium** | $29.99 | 20 | + Binary signals, Discord, full analytics, A/B grades |
+| **VIP** | $79.99 | Unlimited | + All channels, all grades, API access, priority support |
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `BINANCE_API_KEY` | Binance API key | — |
+| `BINANCE_API_SECRET` | Binance API secret | — |
+| `FINNHUB_API_KEY` | Finnhub API key (news) | — |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID (legacy) | — |
+| `BROADCAST_TELEGRAM_CHANNELS` | Comma-separated channel IDs | — |
+| `DISCORD_WEBHOOK_URL` | Discord webhook for broadcasts | — |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email delivery | — |
+| `DATABASE_URL` | Database connection string | `sqlite:///trading_bot.db` |
+| `JWT_SECRET` | JWT signing secret (**change in production**) | `change-me-in-production` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token TTL | `60` |
+| `API_HOST` / `API_PORT` | API server bind address | `0.0.0.0:8000` |
+| `TRADING_MODE` | `paper` or `live` | `paper` |
+| `LOG_LEVEL` | Logging level | `INFO` |
 
 ## Backtesting
 
@@ -140,27 +225,14 @@ result = engine.run(df)
 
 print(f"Total Trades: {result.total_trades}")
 print(f"Win Rate:     {result.win_rate:.1%}")
-print(f"Total Return: {result.total_return_pct:.2f}%")
 print(f"Sharpe Ratio: {result.sharpe_ratio:.2f}")
 print(f"Max Drawdown: {result.max_drawdown:.1%}")
-print(f"Profit Factor:{result.profit_factor:.2f}")
 ```
-
-## Configuration
-
-All parameters are centralised in `config/settings.py` and can be overridden via environment variables. Key settings:
-
-- **Trading pairs** – default: BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT
-- **Timeframe** – default: 1h
-- **Risk per trade** – default: 2 %
-- **Max open trades** – default: 5
-- **Max drawdown** – default: 10 %
-- **Signal confidence threshold** – default: 60 %
-- **Scan interval** – default: 300 s (5 min)
 
 ## Security Notes
 
 - **Never** commit your `.env` file to version control.
+- Change `JWT_SECRET` to a strong random value in production.
 - Use environment variables or a secrets manager for API keys.
 - Always test with `TRADING_MODE=paper` before enabling live trading.
 - Start with small position sizes and monitor performance.
