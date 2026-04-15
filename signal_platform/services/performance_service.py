@@ -114,6 +114,7 @@ class PerformanceService:
                 "total_signals": total,
                 "win_rate": round(wins / total, 4) if total else 0.0,
                 "avg_pnl_percent": round(float(pnl) / total, 2) if total else 0.0,
+                "total_pnl_percent": round(float(pnl), 2),
             })
         return sorted(results, key=lambda r: r["win_rate"], reverse=True)
 

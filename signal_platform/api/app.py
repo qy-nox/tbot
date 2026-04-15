@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -61,12 +62,29 @@ from signal_platform.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
+# ── Lifespan ────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Startup
+    init_db()
+    db = get_session()
+    try:
+        SubscriptionService.seed_plans(db)
+    finally:
+        db.close()
+    yield
+    # Shutdown (nothing to clean up)
+
+
 # ── App factory ─────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Trading Signal Service Platform",
     description="Professional SAAS platform for crypto & binary trading signal distribution.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -76,18 +94,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ── Startup ─────────────────────────────────────────────────────────────
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
-    db = get_session()
-    try:
-        SubscriptionService.seed_plans(db)
-    finally:
-        db.close()
 
 
 # ── Dependencies ────────────────────────────────────────────────────────

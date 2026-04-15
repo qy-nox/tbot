@@ -193,7 +193,7 @@ class TradingBot:
                     take_profit_3=signal.take_profit_3,
                     confidence=signal.confidence,
                     strategy=signal.strategy_name,
-                    reason="; ".join(signal.reasons),
+                    reason="; ".join(signal.reasons) if signal.reasons else "",
                 )
                 DistributionService.distribute(db, sig)
             finally:

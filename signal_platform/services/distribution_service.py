@@ -27,6 +27,7 @@ from signal_platform.models import (
     DeliveryChannel,
     DeliveryStatus,
     SignalDelivery,
+    SignalGrade,
     SignalRecord,
     SignalType,
     SubscriptionTier,
@@ -167,12 +168,12 @@ def _can_receive(user: User, signal: SignalRecord) -> bool:
     if tier == SubscriptionTier.PREMIUM:
         if signal.signal_type == SignalType.BINARY:
             return True
-        return grade in (None, "A+", "A", "B")  # type: ignore[comparison-overlap]
+        return grade in (None, SignalGrade.A_PLUS, SignalGrade.A, SignalGrade.B)
 
     # Free
     if signal.signal_type == SignalType.BINARY:
         return False
-    return grade in (None, "A+", "A")  # type: ignore[comparison-overlap]
+    return grade in (None, SignalGrade.A_PLUS, SignalGrade.A)
 
 
 def _user_channels(user: User) -> list[tuple[DeliveryChannel, str]]:
@@ -335,7 +336,8 @@ def _send_email(to_addr: str, text: str) -> None:
 
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     try:
-        return asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
+        return loop
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

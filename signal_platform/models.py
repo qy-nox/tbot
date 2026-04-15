@@ -286,21 +286,28 @@ class AuditLog(Base):
 
 # ── Engine & Session ────────────────────────────────────────────────────
 
+import threading
+
 _engine = None
 _SessionFactory = None
+_lock = threading.Lock()
 
 
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(Settings.DATABASE_URL, echo=False)
+        with _lock:
+            if _engine is None:
+                _engine = create_engine(Settings.DATABASE_URL, echo=False)
     return _engine
 
 
 def get_session() -> Session:
     global _SessionFactory
     if _SessionFactory is None:
-        _SessionFactory = sessionmaker(bind=get_engine())
+        with _lock:
+            if _SessionFactory is None:
+                _SessionFactory = sessionmaker(bind=get_engine())
     return _SessionFactory()
 
 
