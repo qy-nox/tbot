@@ -4,10 +4,8 @@ Runs a continuous loop that scans configured pairs, analyses data,
 generates signals, and sends notifications.
 """
 
-import asyncio
 import logging
 import time
-import sys
 
 from config.settings import Settings
 from core.data_fetcher import DataFetcher

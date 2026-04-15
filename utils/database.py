@@ -19,6 +19,11 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from config.settings import Settings
 
 
+def _utcnow() -> datetime:
+    """Return the current UTC datetime (used as a column default)."""
+    return datetime.now(timezone.utc)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -29,7 +34,7 @@ class Signal(Base):
     __tablename__ = "signals"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=_utcnow)
     pair = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)  # BUY / SELL
     entry_price = Column(Float, nullable=False)
@@ -54,7 +59,7 @@ class Trade(Base):
     __tablename__ = "trades"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    opened_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    opened_at = Column(DateTime, default=_utcnow)
     closed_at = Column(DateTime)
     pair = Column(String(20), nullable=False)
     direction = Column(String(10), nullable=False)
@@ -75,7 +80,7 @@ class PerformanceMetric(Base):
     __tablename__ = "performance_metrics"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=_utcnow)
     total_trades = Column(Integer, default=0)
     win_rate = Column(Float, default=0.0)
     total_pnl = Column(Float, default=0.0)
