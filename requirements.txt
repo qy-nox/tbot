@@ -1,0 +1,12 @@
+# Requirements for Crypto Trading Bot
+
+pandas
+numpy
+TA-Lib
+ccxt
+finnhub-python
+python-telegram-bot
+tensorflow
+textblob
+vaderSentiment
+# Add any additional dependencies below:
