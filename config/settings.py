@@ -49,6 +49,28 @@ class Settings:
     TIMEFRAME: str = "1h"
     CANDLE_LIMIT: int = 200
 
+    # ── Multi-Timeframe Analysis ──────────────────────────────────────
+    MTF_TIMEFRAMES: list = ["5m", "1h", "4h"]
+    MTF_CANDLE_LIMITS: dict = {"5m": 200, "1h": 200, "4h": 200}
+
+    # ── Binary Trading ────────────────────────────────────────────────
+    BINARY_ENABLED: bool = True
+    BINARY_PAIRS: list = [
+        "BTC/USDT",
+        "ETH/USDT",
+        "BNB/USDT",
+        "SOL/USDT",
+        "XRP/USDT",
+    ]
+    BINARY_TIMEFRAME: str = "5m"
+    BINARY_EXPIRY_SECONDS: int = 300  # 5 minutes
+    BINARY_MIN_CONFIDENCE: float = 0.70
+
+    # ── ML Engine ─────────────────────────────────────────────────────
+    ML_ENABLED: bool = True
+    ML_TRAINING_CANDLES: int = 500
+    ML_PREDICTION_HORIZON: int = 5
+
     # ── Technical Indicator Settings ───────────────────────────────────
     INDICATORS = {
         "rsi": {"period": 14, "overbought": 70, "oversold": 30},
