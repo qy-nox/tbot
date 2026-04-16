@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import InvalidTokenError
 
 from signal_platform.auth import decode_token
 from signal_platform.models import get_session
@@ -31,7 +31,7 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_token(creds.credentials)
-    except jwt.PyJWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     user = UserService.get_by_id(db, int(payload["sub"]))
     if user is None or not user.is_active:

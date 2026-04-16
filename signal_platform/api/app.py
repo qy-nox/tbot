@@ -19,10 +19,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from signal_platform.auth import decode_token
@@ -117,7 +117,7 @@ def _current_user(
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_token(creds.credentials)
-    except jwt.PyJWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     user = UserService.get_by_id(db, int(payload["sub"]))
     if user is None or not user.is_active:
@@ -166,7 +166,7 @@ def login(body: LoginRequest, db: Session = Depends(_db)):
 def refresh(body: RefreshRequest, db: Session = Depends(_db)):
     try:
         payload = decode_token(body.refresh_token)
-    except jwt.PyJWTError:
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Not a refresh token")
