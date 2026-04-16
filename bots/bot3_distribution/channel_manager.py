@@ -11,8 +11,8 @@ from signal_platform.services.distribution_service import _can_receive
 
 def broadcast_channels_from_env() -> list[str]:
     """Return configured broadcast channel IDs from environment."""
-    raw = os.getenv("BROADCAST_TELEGRAM_CHANNELS", "")
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    raw_channels = os.getenv("BROADCAST_TELEGRAM_CHANNELS", "")
+    return [item.strip() for item in raw_channels.split(",") if item.strip()]
 
 
 def subscriber_chat_targets(signal: SignalRecord, users: Iterable[User]) -> list[str]:
