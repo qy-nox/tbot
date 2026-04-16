@@ -35,7 +35,9 @@ class PlatformCompatibilityTests(unittest.TestCase):
         self.assertEqual(list(helpers.chunks([1, 2, 3], 2)), [[1, 2], [3]])
 
     def test_dashboard_static_template_exists(self):
-        static_dashboard = Path("/home/runner/work/tbot/tbot/signal_platform/static/dashboard.html")
+        import signal_platform
+
+        static_dashboard = Path(signal_platform.__file__).resolve().parent / "static" / "dashboard.html"
         self.assertTrue(static_dashboard.exists())
 
 

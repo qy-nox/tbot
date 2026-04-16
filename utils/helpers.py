@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Iterator
 
 
 def utc_timestamp() -> str:
@@ -10,7 +11,7 @@ def utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def chunks(items: list, size: int):
+def chunks(items: list[Any], size: int) -> Iterator[list[Any]]:
     """Yield chunks of *items* with the given *size*."""
     if size <= 0:
         raise ValueError("size must be positive")

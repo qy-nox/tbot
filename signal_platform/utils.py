@@ -19,6 +19,10 @@ def safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def enum_value(value: Any) -> Any:
-    """Return enum value when provided with an enum member."""
+def get_enum_value(value: Any) -> Any:
+    """Extract enum .value, or return the input unchanged if not an enum."""
     return getattr(value, "value", value)
+
+
+# Backward-compatible alias
+enum_value = get_enum_value
