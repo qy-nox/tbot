@@ -26,6 +26,7 @@ from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from signal_platform.auth import decode_token
+from dashboard.backend.api import router as dashboard_backend_router
 from signal_platform.models import (
     SignalGrade,
     SignalOutcome,
@@ -96,6 +97,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(dashboard_router)
+app.include_router(dashboard_backend_router)
 
 
 # ── Dependencies ────────────────────────────────────────────────────────
