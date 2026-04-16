@@ -12,7 +12,7 @@ import time
 import signal
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # Configure logging
 logging.basicConfig(
@@ -75,10 +75,7 @@ class BotManager:
                 process = subprocess.Popen(
                     bot['cmd'],
                     cwd=PROJECT_ROOT,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    bufsize=1
+                    start_new_session=True,
                 )
                 
                 self.processes.append(process)
@@ -130,10 +127,14 @@ class BotManager:
         for i, process in enumerate(self.processes):
             try:
                 process.terminate()
+                process.wait(timeout=5)
                 logger.info(f"   ✅ Stopped Bot {i+1}")
                 time.sleep(0.5)
-            except:
-                pass
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
         
         logger.info("✅ All services stopped successfully!")
 
