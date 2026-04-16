@@ -35,6 +35,6 @@ class EnsembleMetaModel:
         if total_weight <= 0:
             return "HOLD", 0.0
 
-        direction = max(direction_scores, key=direction_scores.get)
+        direction = max(direction_scores, key=lambda candidate: direction_scores[candidate])
         confidence = direction_scores[direction] / total_weight
         return direction, round(float(confidence), 4)
