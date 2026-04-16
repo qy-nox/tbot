@@ -12,6 +12,20 @@ class BotEntrypointTests(unittest.TestCase):
             os.environ,
             {
                 "TELEGRAM_BOT_TOKEN": "111:base",
+                "BOT1_SUBSCRIPTION_TOKEN": "222:sub",
+                "BOT2_ADMIN_TOKEN": "333:admin",
+            },
+            clear=True,
+        ):
+            reloaded = importlib.reload(settings_module)
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_MAIN, "111:base")
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_SUB, "222:sub")
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_ADMIN, "333:admin")
+
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": "111:base",
                 "TELEGRAM_BOT_TOKEN_MAIN": "",
                 "TELEGRAM_BOT_TOKEN_SUB": "",
                 "BOT1_SUBSCRIPTION_TOKEN": "222:sub",
