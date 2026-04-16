@@ -96,11 +96,11 @@ class AdvancedMLEngineV2:
         last_price = close.iloc[-1]
         mean_20 = close.tail(20).mean()
 
-        votes.setdefault("lightgbm", "BUY" if momentum > 0 else "SELL")
-        votes.setdefault("random_forest", "BUY" if ema_9 >= ema_21 else "SELL")
-        votes.setdefault("gradient_boosting", "BUY" if last_price > mean_20 else "SELL")
+        votes["lightgbm"] = votes.get("lightgbm", "BUY" if momentum > 0 else "SELL")
+        votes["random_forest"] = votes.get("random_forest", "BUY" if ema_9 >= ema_21 else "SELL")
+        votes["gradient_boosting"] = votes.get("gradient_boosting", "BUY" if last_price > mean_20 else "SELL")
         votes["xgboost_proxy"] = "BUY" if momentum > 0.002 else ("SELL" if momentum < -0.002 else "HOLD")
         votes["neural_net_proxy"] = "BUY" if ema_9 > ema_21 else "SELL"
         votes["isolation_forest"] = "HOLD" if volatility > 0.03 else ("BUY" if momentum >= 0 else "SELL")
-        votes["svm_proxy"] = "SELL" if last_price > mean_20 * 1.01 else ("BUY" if last_price < mean_20 * 0.99 else "HOLD")
+        votes["svm_proxy"] = "BUY" if last_price > mean_20 * 1.01 else ("SELL" if last_price < mean_20 * 0.99 else "HOLD")
         return votes

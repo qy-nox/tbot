@@ -27,7 +27,7 @@ class TestAdvancedMLEngineV2(unittest.TestCase):
         self.assertGreaterEqual(prediction.confidence, 0.0)
         self.assertLessEqual(prediction.confidence, 1.0)
 
-    def test_reinforcement_feedback_adjusts_confidence(self):
+    def test_positive_reinforcement_increases_confidence(self):
         engine = AdvancedMLEngineV2()
         df = self._sample_df()
         before = engine.predict(df)
@@ -36,7 +36,20 @@ class TestAdvancedMLEngineV2(unittest.TestCase):
         engine.record_outcome(before.direction, pnl=1.0)
         after = engine.predict(df)
         self.assertIsNotNone(after)
+        self.assertEqual(after.direction, before.direction)
         self.assertGreaterEqual(after.confidence, before.confidence)
+
+    def test_negative_reinforcement_reduces_confidence(self):
+        engine = AdvancedMLEngineV2()
+        df = self._sample_df()
+        before = engine.predict(df)
+        self.assertIsNotNone(before)
+
+        engine.record_outcome(before.direction, pnl=-1.0)
+        after = engine.predict(df)
+        self.assertIsNotNone(after)
+        self.assertEqual(after.direction, before.direction)
+        self.assertLessEqual(after.confidence, before.confidence)
 
 
 if __name__ == "__main__":
