@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  tbot:
+    build: .
+    env_file:
+      - .env
+    command: ["python", "main.py", "--both"]
+    ports:
+      - "8000:8000"
