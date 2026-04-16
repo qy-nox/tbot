@@ -9,8 +9,8 @@ A production-ready SAAS platform for crypto and binary trading signal generation
 | **User Management** | Registration, JWT authentication, subscription tiers (Free / Premium / VIP), user profiles |
 | **Signal Types** | Crypto trading signals (Binance, Bybit, etc.) and binary trading signals (CALL/PUT) |
 | **Signal Quality** | Auto-grading (A+, A, B, C), confidence scoring, win-rate filtering, validity periods |
-| **AI/ML Engine** | 3-model voting ensemble (LightGBM + RandomForest + GradientBoosting), no GPU needed |
-| **Multi-Timeframe** | Simultaneous analysis of 5m, 1h, 4h timeframes with weighted consensus |
+| **AI/ML Engine** | 7-model voting stack (LightGBM, XGBoost-proxy, RandomForest, Neural-Net-proxy, Isolation-Forest-proxy, GradientBoosting, SVM-proxy) with regime-aware meta voting |
+| **Multi-Timeframe** | Simultaneous analysis with weighted consensus and confluence scoring |
 | **On-Chain Data** | Whale tracking, exchange inflow/outflow, network metrics (free APIs) |
 | **Distribution** | Telegram groups & channels, Discord webhooks, email, API — with retry on failure |
 | **Performance** | Win rate (daily/weekly/monthly), ROI tracking, per-pair analytics, leaderboards |
