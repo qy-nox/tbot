@@ -1,3 +1,4 @@
+import importlib
 import os
 import unittest
 from unittest.mock import patch
@@ -31,13 +32,16 @@ class BotEntrypointTests(unittest.TestCase):
             self.assertEqual(_admin_ids(), {1, 2, 3})
 
     def test_bots_raise_clear_error_when_telegram_dependency_missing(self):
-        from bots.bot_admin.main import _ensure_telegram_dependency as ensure_admin
-        from bots.bot_main.main import _ensure_telegram_dependency as ensure_main
-        from bots.bot_subscription.main import _ensure_telegram_dependency as ensure_sub
+        modules = [
+            importlib.import_module("bots.bot_main.main"),
+            importlib.import_module("bots.bot_subscription.main"),
+            importlib.import_module("bots.bot_admin.main"),
+        ]
 
-        for ensure in (ensure_main, ensure_sub, ensure_admin):
-            with self.assertRaises(RuntimeError):
-                ensure()
+        for module in modules:
+            with patch.object(module, "_TELEGRAM_IMPORT_ERROR", ModuleNotFoundError("telegram")):
+                with self.assertRaises(RuntimeError):
+                    module._ensure_telegram_dependency()
 
 
 if __name__ == "__main__":
