@@ -2,6 +2,41 @@
 
 A production-ready SAAS platform for crypto and binary trading signal generation, distribution, and user management. Built on top of a modular trading bot with technical analysis, sentiment analysis, AI/ML prediction, on-chain analytics, multi-timeframe analysis, risk management, and backtesting.
 
+## How the Full Ecosystem Works
+
+The platform is designed as a **multi-bot ecosystem** with a unified backend:
+
+1. **Subscription & Payment Flow (Bot 1 responsibilities)**
+   - User onboarding and plan selection
+   - Payment capture/verification workflow
+   - Activation of subscription access after approval
+
+2. **User/Admin Control Flow (Bot 2 responsibilities)**
+   - Admin controls for users, plans, groups, notifications, and approvals
+   - Renewal and expiry lifecycle management
+   - Reporting and analytics orchestration
+
+3. **Signal Validation/Distribution Flow (Bot 3 responsibilities)**
+   - Signal intake from strategy engines
+   - Grade/confidence filtering and anti-duplicate checks
+   - Tier-aware formatting and channel distribution
+
+4. **Admin Web/API + Mobile Clients**
+   - FastAPI endpoints for auth, users, subscriptions, payments, signals, and analytics
+   - Web dashboard for operational control and reporting
+   - Mobile client support for subscriptions, signal history, and performance views
+
+5. **Unified Data Layer**
+   - Shared SQL models for users, subscriptions, payments, signals, deliveries, outcomes, and audit logs
+   - Services use this data to enforce tiers, limits, and access rules consistently
+
+## Profitability Disclaimer
+
+- The system helps generate, score, and distribute trading signals with structured risk controls.
+- **No signal platform can guarantee profits.**
+- Real-world performance depends on market conditions, execution quality, slippage, and user risk management.
+- Always paper-trade first and use strict position sizing.
+
 ## Platform Features
 
 | Category | Features |
