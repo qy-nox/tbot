@@ -15,7 +15,7 @@ def approve_payment(db, payment_id: int, transaction_id: str) -> Payment:
 
 
 def reject_payment(db, payment_id: int) -> str:
-    payment = db.query(Payment).get(payment_id)
+    payment = db.get(Payment, payment_id)
     if payment is None:
         return "Payment not found"
     payment.status = "rejected"

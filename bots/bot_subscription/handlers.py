@@ -7,6 +7,12 @@ from bots.bot_subscription.payment_flow import begin_subscription, submit_transa
 from bots.bot_subscription.storage import get_application
 
 
+def _mask_tx(transaction_id: str) -> str:
+    if len(transaction_id) <= 4:
+        return "***"
+    return f"***{transaction_id[-4:]}"
+
+
 def handle_start() -> dict[str, object]:
     return {
         "text": "Welcome! Start your subscription journey.",
@@ -38,4 +44,5 @@ def handle_billing(user_id: int) -> str:
     app = get_application(user_id)
     if app is None or app.transaction_id is None:
         return "No billing history"
-    return f"Last payment tx: {app.transaction_id} on {app.payment_date:%Y-%m-%d}"
+    payment_date = app.payment_date.strftime("%Y-%m-%d") if app.payment_date is not None else "unknown date"
+    return f"Last payment tx: {_mask_tx(app.transaction_id)} on {payment_date}"

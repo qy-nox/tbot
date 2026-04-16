@@ -22,6 +22,7 @@ class SubscriptionRecord(Base):
     plan = Column(String(20), nullable=False)
     status = Column(String(20), default="active", nullable=False)
     payment_date = Column(DateTime, default=_utcnow)
+    user = relationship("User")
 
 
 class SignalGroup(Base):

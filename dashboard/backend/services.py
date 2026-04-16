@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlalchemy import func
+
 from bots.bot_main.market_data import get_live_market_status
 from signal_platform.models import Payment, SignalRecord, User
 from signal_platform.services.performance_service import PerformanceService
@@ -27,7 +29,7 @@ def market_snapshot():
 def analytics_overview(db) -> dict[str, float | int]:
     perf = PerformanceService.overview(db)
     return {
-        "total_users": db.query(User).count(),
+        "total_users": db.query(func.count(User.id)).scalar() or 0,
         "total_revenue": SubscriptionService.total_revenue(db),
         "win_rate": float(perf["win_rate"]),
     }

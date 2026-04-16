@@ -31,7 +31,8 @@ def main() -> None:
     elif args.command == "subscribe":
         print(handle_subscribe(username=args.username, user_id=args.user_id, telegram_id=args.telegram_id, plan=args.plan))
     elif args.command == "transaction":
-        print(handle_transaction(user_id=args.user_id, transaction_id=args.tx or "demo-tx"))
+        tx_id = args.tx or "demo-tx"
+        handle_transaction(user_id=args.user_id, transaction_id=tx_id)
     elif args.command == "status":
         print(handle_status(args.user_id))
     else:

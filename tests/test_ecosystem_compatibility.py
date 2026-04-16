@@ -52,7 +52,10 @@ class EcosystemCompatibilityTests(unittest.TestCase):
 
         self.assertIn("Welcome", handle_start()["text"])
         self.assertIn("/help", handle_help())
-        self.assertIn("trend", handle_market())
+        market = handle_market()
+        self.assertIsInstance(market, dict)
+        self.assertIn("assets", market)
+        self.assertIn("trend", market)
         self.assertEqual(len(handle_admin()["keyboard"]), 4)
         self.assertEqual(len(handle_plans()["keyboard"]), 3)
         self.assertIn("Welcome", sub_start()["text"])
