@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -15,3 +19,6 @@ class PlatformSettings:
 
 
 settings = PlatformSettings()
+
+if settings.jwt_secret == "change-me-in-production":
+    logger.warning("JWT_SECRET is using the default insecure value; set it before production use.")

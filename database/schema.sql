@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
 
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   amount FLOAT NOT NULL,
   currency VARCHAR(10) DEFAULT 'USD',
   provider VARCHAR(20),
@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS signal_records (
 
 CREATE TABLE IF NOT EXISTS signal_deliveries (
   id INTEGER PRIMARY KEY,
-  signal_id INTEGER NOT NULL REFERENCES signal_records(id),
-  user_id INTEGER REFERENCES users(id),
+  signal_id INTEGER NOT NULL REFERENCES signal_records(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   channel VARCHAR(20) NOT NULL,
   channel_target VARCHAR(120),
   status VARCHAR(20) DEFAULT 'pending',
