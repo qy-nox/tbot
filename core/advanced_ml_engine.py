@@ -44,6 +44,8 @@ class AdvancedMLEngine:
         counts: dict[str, int] = {}
         for vote in votes.values():
             counts[vote] = counts.get(vote, 0) + 1
+        if not counts:
+            return None
         direction = max(counts, key=counts.get)
         confidence = counts[direction] / max(len(votes), 1)
 

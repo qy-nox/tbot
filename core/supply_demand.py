@@ -12,6 +12,14 @@ class SupplyDemandAnalyzer:
         self.ta = TechnicalAnalyzer()
 
     def zones(self, df: pd.DataFrame) -> dict:
+        """Return support/resistance and supply/demand zone collections.
+
+        Output keys:
+        - ``supports``: list of support price levels
+        - ``resistances``: list of resistance price levels
+        - ``demand``: detected demand zone dictionaries
+        - ``supply``: detected supply zone dictionaries
+        """
         sr = self.ta.compute_support_resistance(df)
         sd = self.ta.compute_supply_demand_zones(df)
         return {

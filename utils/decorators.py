@@ -11,7 +11,8 @@ def timed(fn):
     def wrapper(*args, **kwargs):
         start = perf_counter()
         result = fn(*args, **kwargs)
-        _ = perf_counter() - start
+        wrapper.last_elapsed = perf_counter() - start
         return result
 
+    wrapper.last_elapsed = 0.0
     return wrapper
