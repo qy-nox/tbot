@@ -5,6 +5,20 @@ from unittest.mock import patch
 
 
 class BotEntrypointTests(unittest.TestCase):
+    def test_bot1_subscription_entrypoint_delegates_to_subscription_bot(self):
+        from bots.bot1_subscription import main as bot1_main
+
+        with patch("bots.bot1_subscription.main.subscription_main.main") as canonical_main:
+            bot1_main.main()
+            canonical_main.assert_called_once()
+
+    def test_bot2_admin_entrypoint_delegates_to_admin_bot(self):
+        from bots.bot2_admin import main as bot2_main
+
+        with patch("bots.bot2_admin.main.admin_main.main") as canonical_main:
+            bot2_main.main()
+            canonical_main.assert_called_once()
+
     def test_settings_bot_token_aliases(self):
         import config.settings as settings_module
 
