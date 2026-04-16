@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from signal_platform.models import (
     SignalOutcome,
@@ -32,50 +33,61 @@ def _quick_stats() -> dict:
     """Gather lightweight statistics for the dashboard."""
     db = get_session()
     try:
-        total_signals = db.query(func.count(SignalRecord.id)).scalar() or 0
-        crypto_signals = (
-            db.query(func.count(SignalRecord.id))
-            .filter(SignalRecord.signal_type == SignalType.CRYPTO)
-            .scalar()
-            or 0
-        )
-        binary_signals = (
-            db.query(func.count(SignalRecord.id))
-            .filter(SignalRecord.signal_type == SignalType.BINARY)
-            .scalar()
-            or 0
-        )
-
-        won = (
-            db.query(func.count(SignalRecord.id))
-            .filter(
-                SignalRecord.outcome.in_([
-                    SignalOutcome.TP1_HIT,
-                    SignalOutcome.TP2_HIT,
-                    SignalOutcome.TP3_HIT,
-                ])
+        try:
+            total_signals = db.query(func.count(SignalRecord.id)).scalar() or 0
+            crypto_signals = (
+                db.query(func.count(SignalRecord.id))
+                .filter(SignalRecord.signal_type == SignalType.CRYPTO)
+                .scalar()
+                or 0
             )
-            .scalar()
-            or 0
-        )
-        lost = (
-            db.query(func.count(SignalRecord.id))
-            .filter(SignalRecord.outcome == SignalOutcome.SL_HIT)
-            .scalar()
-            or 0
-        )
-        resolved = won + lost
-        win_rate = (won / resolved * 100) if resolved else 0.0
+            binary_signals = (
+                db.query(func.count(SignalRecord.id))
+                .filter(SignalRecord.signal_type == SignalType.BINARY)
+                .scalar()
+                or 0
+            )
 
-        total_users = db.query(func.count(User.id)).scalar() or 0
+            won = (
+                db.query(func.count(SignalRecord.id))
+                .filter(
+                    SignalRecord.outcome.in_([
+                        SignalOutcome.TP1_HIT,
+                        SignalOutcome.TP2_HIT,
+                        SignalOutcome.TP3_HIT,
+                    ])
+                )
+                .scalar()
+                or 0
+            )
+            lost = (
+                db.query(func.count(SignalRecord.id))
+                .filter(SignalRecord.outcome == SignalOutcome.SL_HIT)
+                .scalar()
+                or 0
+            )
+            resolved = won + lost
+            win_rate = (won / resolved * 100) if resolved else 0.0
 
-        # Recent signals
-        recent = (
-            db.query(SignalRecord)
-            .order_by(SignalRecord.timestamp.desc())
-            .limit(20)
-            .all()
-        )
+            total_users = db.query(func.count(User.id)).scalar() or 0
+
+            # Recent signals
+            recent = (
+                db.query(SignalRecord)
+                .order_by(SignalRecord.timestamp.desc())
+                .limit(20)
+                .all()
+            )
+        except (OperationalError, ProgrammingError):
+            logger.warning("Dashboard stats unavailable before DB initialization.")
+            total_signals = 0
+            crypto_signals = 0
+            binary_signals = 0
+            won = 0
+            lost = 0
+            win_rate = 0.0
+            total_users = 0
+            recent = []
 
         recent_list = []
         for sig in recent:
