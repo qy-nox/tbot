@@ -1,45 +1,145 @@
-"""CLI entrypoint for admin bot commands."""
+"""Async Telegram entrypoint for the admin bot."""
 
 from __future__ import annotations
 
-import argparse
+import logging
+import os
 
-from bots.bot_admin.handlers import (
-    handle_admin,
-    handle_ban,
-    handle_groups,
-    handle_payments,
-    handle_stats,
-    handle_unban,
-    handle_users,
-)
-from signal_platform.models import get_session
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+
+logger = logging.getLogger(__name__)
+
+
+def _require_token() -> str:
+    token = os.getenv("TELEGRAM_BOT_TOKEN_ADMIN") or os.getenv("BOT2_ADMIN_TOKEN")
+    if not token or ":" not in token:
+        raise RuntimeError("Missing or invalid TELEGRAM_BOT_TOKEN_ADMIN")
+    return token
+
+
+def _admin_ids() -> set[int]:
+    raw = os.getenv("ADMIN_USER_IDS") or os.getenv("ADMIN_IDS") or ""
+    parsed: set[int] = set()
+    for value in raw.split(","):
+        value = value.strip()
+        if value.isdigit():
+            parsed.add(int(value))
+    return parsed
+
+
+def _admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💳 Payments", callback_data="payments"), InlineKeyboardButton("👥 Users", callback_data="users")],
+            [InlineKeyboardButton("📊 Stats", callback_data="stats"), InlineKeyboardButton("👥 Groups", callback_data="groups")],
+        ]
+    )
+
+
+class AdminBot:
+    def __init__(self) -> None:
+        self.allowed_admins = _admin_ids()
+
+    def _is_admin(self, update: Update) -> bool:
+        user = update.effective_user
+        return bool(user and user.id in self.allowed_admins)
+
+    async def _forbidden(self, update: Update) -> None:
+        await update.effective_message.reply_text("Unauthorized")
+
+    async def admin_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from bots.bot_admin.handlers import handle_admin
+
+        if not self._is_admin(update):
+            await self._forbidden(update)
+            return
+        payload = handle_admin()
+        await update.effective_message.reply_text(str(payload["text"]), reply_markup=_admin_keyboard())
+
+    async def groups_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from bots.bot_admin.handlers import handle_groups
+
+        if not self._is_admin(update):
+            await self._forbidden(update)
+            return
+        await update.effective_message.reply_text(handle_groups(), reply_markup=_admin_keyboard())
+
+    async def payments_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from bots.bot_admin.handlers import handle_payments
+        from signal_platform.models import get_session
+
+        if not self._is_admin(update):
+            await self._forbidden(update)
+            return
+        db = get_session()
+        try:
+            text = handle_payments(db)
+        finally:
+            db.close()
+        await update.effective_message.reply_text(text, reply_markup=_admin_keyboard())
+
+    async def users_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from bots.bot_admin.handlers import handle_users
+        from signal_platform.models import get_session
+
+        if not self._is_admin(update):
+            await self._forbidden(update)
+            return
+        db = get_session()
+        try:
+            text = handle_users(db)
+        finally:
+            db.close()
+        await update.effective_message.reply_text(text, reply_markup=_admin_keyboard())
+
+    async def stats_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from bots.bot_admin.handlers import handle_stats
+        from signal_platform.models import get_session
+
+        if not self._is_admin(update):
+            await self._forbidden(update)
+            return
+        db = get_session()
+        try:
+            stats = handle_stats(db)
+        finally:
+            db.close()
+        msg = (
+            f"Signals: {stats.get('total_signals', 0)}\n"
+            f"Wins: {stats.get('wins', 0)}\n"
+            f"Losses: {stats.get('losses', 0)}\n"
+            f"Win Rate: {stats.get('win_rate', 0)}%"
+        )
+        await update.effective_message.reply_text(msg, reply_markup=_admin_keyboard())
+
+    async def callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await update.callback_query.answer()
+        data = (update.callback_query.data or "").strip()
+        if data == "payments":
+            await self.payments_cmd(update, context)
+        elif data == "users":
+            await self.users_cmd(update, context)
+        elif data == "stats":
+            await self.stats_cmd(update, context)
+        elif data == "groups":
+            await self.groups_cmd(update, context)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Admin Bot helper")
-    parser.add_argument("--command", choices=["admin", "payments", "users", "groups", "stats", "ban", "unban"], default="admin")
-    parser.add_argument("--user-id", type=int, default=1)
-    args = parser.parse_args()
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    app = Application.builder().token(_require_token()).build()
+    bot = AdminBot()
 
-    if args.command in {"admin", "groups"}:
-        print(handle_admin() if args.command == "admin" else handle_groups())
-        return
+    app.add_handler(CommandHandler("admin", bot.admin_cmd))
+    app.add_handler(CommandHandler("payments", bot.payments_cmd))
+    app.add_handler(CommandHandler("users", bot.users_cmd))
+    app.add_handler(CommandHandler("stats", bot.stats_cmd))
+    app.add_handler(CommandHandler("groups", bot.groups_cmd))
+    app.add_handler(CallbackQueryHandler(bot.callback))
 
-    db = get_session()
-    try:
-        if args.command == "payments":
-            print(handle_payments(db))
-        elif args.command == "users":
-            print(handle_users(db))
-        elif args.command == "stats":
-            print(handle_stats(db))
-        elif args.command == "ban":
-            print(handle_ban(db, args.user_id))
-        else:
-            print(handle_unban(db, args.user_id))
-    finally:
-        db.close()
+    logger.info("Starting admin bot")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
