@@ -34,6 +34,7 @@ from signal_platform.models import (
     get_session,
     init_db,
 )
+from signal_platform.dashboard import router as dashboard_router
 from signal_platform.schemas import (
     AdminDashboard,
     AdminUserUpdate,
@@ -94,6 +95,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(dashboard_router)
 
 
 # ── Dependencies ────────────────────────────────────────────────────────

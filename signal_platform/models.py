@@ -290,7 +290,7 @@ import threading
 
 _engine = None
 _SessionFactory = None
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 
 def get_engine():
