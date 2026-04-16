@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from signal_platform.api.app import login, refresh, register
-from signal_platform.schemas import LoginRequest, RefreshRequest, TokenResponse, UserProfile, RegisterRequest
+from signal_platform.schemas import TokenResponse, UserProfile
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 router.add_api_route("/register", register, methods=["POST"], response_model=UserProfile, status_code=201)

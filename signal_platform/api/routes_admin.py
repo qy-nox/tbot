@@ -9,7 +9,7 @@ from signal_platform.api.app import (
     create_snapshot,
     retry_deliveries,
 )
-from signal_platform.schemas import AdminDashboard, AdminUserUpdate, UserProfile
+from signal_platform.schemas import AdminDashboard, UserProfile
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 router.add_api_route("/dashboard", admin_dashboard, methods=["GET"], response_model=AdminDashboard)
@@ -18,4 +18,4 @@ router.add_api_route("/users/{user_id}", admin_update_user, methods=["PATCH"], r
 router.add_api_route("/deliveries/retry", retry_deliveries, methods=["POST"])
 router.add_api_route("/performance/snapshot", create_snapshot, methods=["POST"])
 
-__all__ = ["router", "AdminUserUpdate"]
+__all__ = ["router"]
