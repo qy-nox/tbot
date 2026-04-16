@@ -307,5 +307,5 @@ class MLEngine:
 
     @property
     def is_ready(self) -> bool:
-        """Return True if at least one model is trained."""
-        return self._is_trained and len(self.models) > 0
+        """Return True if models have been trained or loaded from cache."""
+        return self._is_trained
