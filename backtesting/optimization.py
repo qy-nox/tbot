@@ -6,6 +6,9 @@ from typing import Callable
 
 
 def grid_search(params: dict[str, list], scorer: Callable[[dict], float]) -> tuple[dict, float]:
+    if not params or any(len(values) == 0 for values in params.values()):
+        return {}, 0.0
+
     best_params: dict = {}
     best_score = float("-inf")
     keys = list(params.keys())

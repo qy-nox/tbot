@@ -46,7 +46,8 @@ class AdvancedMLEngine:
             counts[vote] = counts.get(vote, 0) + 1
         if not counts:
             return None
-        direction = max(counts, key=counts.get)
+        priority = {"BUY": 3, "HOLD": 2, "SELL": 1}
+        direction = max(counts, key=lambda k: (counts[k], priority.get(k, 0)))
         confidence = counts[direction] / max(len(votes), 1)
 
         return AdvancedMLPrediction(direction=direction, confidence=float(np.clip(confidence, 0.0, 1.0)), votes=votes)

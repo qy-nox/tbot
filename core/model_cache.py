@@ -21,7 +21,10 @@ class ModelCache:
         path = self.cache_dir / f"{name}.pkl"
         if not path.exists():
             return None
-        return joblib.load(path)
+        try:
+            return joblib.load(path)
+        except Exception:
+            return None
 
     def save(self, name: str, model: Any) -> Path:
         path = self.cache_dir / f"{name}.pkl"
