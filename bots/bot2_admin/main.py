@@ -1,23 +1,10 @@
-"""CLI entrypoint for Bot 2 (admin control)."""
+"""Compatibility entrypoint for the admin Telegram bot."""
 
-from __future__ import annotations
-
-import argparse
-
-from bots.bot2_admin.handlers import handle_list_users
-from signal_platform.models import get_session
+from bots.bot_admin import main as admin_main
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Bot2 Admin helper")
-    parser.add_argument("--limit", type=int, default=20)
-    args = parser.parse_args()
-
-    db = get_session()
-    try:
-        print(handle_list_users(db, limit=args.limit))
-    finally:
-        db.close()
+    admin_main.main()
 
 
 if __name__ == "__main__":
