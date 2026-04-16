@@ -19,13 +19,22 @@ class PlatformCompatibilityTests(unittest.TestCase):
         self.assertTrue(callable(init_db))
 
     def test_new_support_modules_import(self):
+        from bots.bot1_subscription.keyboard import plans_keyboard
+        from bots.bot1_subscription.utils import format_plan_catalog, format_welcome_message
         from bots.bot2_admin.database import open_session as admin_open_session
+        from bots.bot2_admin.keyboard import admin_keyboard
+        from bots.bot3_distribution.channel_manager import broadcast_channels_from_env
         from config.bot_config import BotConfig, bot_config
         from database.migrations import run_migrations
         from signal_platform import constants, exceptions, utils
         from utils import helpers, validators
 
+        self.assertEqual(len(plans_keyboard()), 3)
+        self.assertIn("Welcome", format_welcome_message())
+        self.assertIn("premium", format_plan_catalog())
         self.assertTrue(callable(admin_open_session))
+        self.assertEqual(len(admin_keyboard()), 4)
+        self.assertIsInstance(broadcast_channels_from_env(), list)
         self.assertIsInstance(bot_config, BotConfig)
         self.assertTrue(callable(run_migrations))
         self.assertEqual(constants.DEFAULT_TIMEZONE, "UTC")
