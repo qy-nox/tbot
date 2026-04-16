@@ -4,11 +4,26 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+try:
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+except ModuleNotFoundError as exc:  # pragma: no cover - import-time fallback
+    InlineKeyboardButton = InlineKeyboardMarkup = Update = Any
+    Application = CallbackQueryHandler = CommandHandler = ContextTypes = Any
+    _TELEGRAM_IMPORT_ERROR = exc
+else:
+    _TELEGRAM_IMPORT_ERROR = None
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_telegram_dependency() -> None:
+    if _TELEGRAM_IMPORT_ERROR is not None:
+        raise RuntimeError(
+            "python-telegram-bot is required to run bots.bot_subscription.main; install dependencies from requirements.txt"
+        ) from _TELEGRAM_IMPORT_ERROR
 
 
 def _require_token() -> str:
@@ -97,6 +112,7 @@ class SubscriptionBot:
 
 
 def main() -> None:
+    _ensure_telegram_dependency()
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     app = Application.builder().token(_require_token()).build()
     bot = SubscriptionBot()
