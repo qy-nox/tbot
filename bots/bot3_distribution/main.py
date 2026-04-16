@@ -16,7 +16,7 @@ def main() -> None:
 
     db = get_session()
     try:
-        signal = db.query(SignalRecord).get(args.signal_id)
+        signal = db.get(SignalRecord, args.signal_id)
         if not is_valid_signal(signal):
             raise SystemExit("Invalid or missing signal")
         deliveries = distribute_signal(db, signal)
