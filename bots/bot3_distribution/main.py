@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from bots.bot3_distribution.distributor import distribute_signal
-from bots.bot3_distribution.signal_validator import is_valid_signal
+from bots.bot3_distribution.handlers import handle_distribute
 from signal_platform.models import SignalRecord, get_session
 
 
@@ -17,10 +16,10 @@ def main() -> None:
     db = get_session()
     try:
         signal = db.get(SignalRecord, args.signal_id)
-        if not is_valid_signal(signal):
-            raise SystemExit("Invalid or missing signal")
-        deliveries = distribute_signal(db, signal)
-        print(f"Delivered to {len(deliveries)} targets")
+        ok, message = handle_distribute(db, signal)
+        if not ok:
+            raise SystemExit(message)
+        print(message)
     finally:
         db.close()
 
