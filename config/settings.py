@@ -27,6 +27,17 @@ class Settings:
 
     # ── Telegram ───────────────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_BOT_TOKEN_MAIN: str = os.getenv("TELEGRAM_BOT_TOKEN_MAIN") or TELEGRAM_BOT_TOKEN
+    TELEGRAM_BOT_TOKEN_SUB: str = (
+        os.getenv("TELEGRAM_BOT_TOKEN_SUB")
+        or os.getenv("BOT1_SUBSCRIPTION_TOKEN")
+        or os.getenv("TELEGRAM_TOKEN_BOT1", "")
+    )
+    TELEGRAM_BOT_TOKEN_ADMIN: str = (
+        os.getenv("TELEGRAM_BOT_TOKEN_ADMIN")
+        or os.getenv("BOT2_ADMIN_TOKEN")
+        or os.getenv("TELEGRAM_TOKEN_BOT2", "")
+    )
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
     # ── Database ───────────────────────────────────────────────────────

@@ -5,6 +5,28 @@ from unittest.mock import patch
 
 
 class BotEntrypointTests(unittest.TestCase):
+    def test_settings_bot_token_aliases(self):
+        import config.settings as settings_module
+
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": "111:base",
+                "TELEGRAM_BOT_TOKEN_MAIN": "",
+                "TELEGRAM_BOT_TOKEN_SUB": "",
+                "BOT1_SUBSCRIPTION_TOKEN": "222:sub",
+                "TELEGRAM_BOT_TOKEN_ADMIN": "",
+                "BOT2_ADMIN_TOKEN": "333:admin",
+            },
+            clear=False,
+        ):
+            reloaded = importlib.reload(settings_module)
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_MAIN, "111:base")
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_SUB, "222:sub")
+            self.assertEqual(reloaded.Settings.TELEGRAM_BOT_TOKEN_ADMIN, "333:admin")
+
+        importlib.reload(settings_module)
+
     def test_main_bot_token_validation(self):
         from bots.bot_main.main import _require_token
 
