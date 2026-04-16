@@ -82,3 +82,36 @@ CREATE TABLE IF NOT EXISTS signal_deliveries (
   created_at TIMESTAMP,
   UNIQUE(signal_id, user_id, channel)
 );
+
+CREATE TABLE IF NOT EXISTS performance_snapshots (
+  id INTEGER PRIMARY KEY,
+  period VARCHAR(10) NOT NULL,
+  period_start TIMESTAMP NOT NULL,
+  period_end TIMESTAMP NOT NULL,
+  pair VARCHAR(20),
+  total_signals INTEGER DEFAULT 0,
+  winning_signals INTEGER DEFAULT 0,
+  losing_signals INTEGER DEFAULT 0,
+  win_rate FLOAT DEFAULT 0,
+  total_pnl_percent FLOAT DEFAULT 0,
+  avg_pnl_percent FLOAT DEFAULT 0,
+  best_signal_pnl FLOAT,
+  worst_signal_pnl FLOAT,
+  avg_confidence FLOAT,
+  created_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY,
+  timestamp TIMESTAMP,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action VARCHAR(50) NOT NULL,
+  resource VARCHAR(50),
+  resource_id INTEGER,
+  detail TEXT,
+  ip_address VARCHAR(45)
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_records_timestamp ON signal_records(timestamp);
+CREATE INDEX IF NOT EXISTS idx_signal_records_pair ON signal_records(pair);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);

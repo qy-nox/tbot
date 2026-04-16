@@ -164,6 +164,8 @@ def dashboard_page():
   .outcome-pending {{ background: #30363d; color: #8b949e; }}
   h2 {{ font-size: 18px; margin-bottom: 12px; color: #e6edf3; }}
   .section {{ margin-bottom: 24px; }}
+  .chart-wrap {{ background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; }}
+  canvas {{ max-height: 280px; }}
   @media (max-width: 600px) {{
     .stats {{ grid-template-columns: 1fr 1fr; }}
     .header {{ flex-direction: column; gap: 8px; }}
@@ -200,6 +202,13 @@ def dashboard_page():
 </div>
 
 <div class="section">
+  <h2>Performance Snapshot</h2>
+  <div class="chart-wrap">
+    <canvas id="outcomesChart"></canvas>
+  </div>
+</div>
+
+<div class="section">
   <h2>Recent Signals</h2>
   <table>
     <thead>
@@ -214,7 +223,33 @@ def dashboard_page():
   </table>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+const ctx = document.getElementById('outcomesChart');
+if (window.Chart) {{
+  new Chart(ctx, {{
+    type: 'doughnut',
+    data: {{
+      labels: ['Wins', 'Losses'],
+      datasets: [{{
+        data: [{stats['won']}, {stats['lost']}],
+        backgroundColor: ['#3fb950', '#f85149'],
+        borderWidth: 0
+      }}]
+    }},
+    options: {{
+      responsive: true,
+      plugins: {{
+        legend: {{
+          labels: {{
+            color: '#c9d1d9'
+          }}
+        }}
+      }}
+    }}
+  }});
+}}
+
 // Auto-refresh every 60 seconds
 setTimeout(function(){{ location.reload(); }}, 60000);
 </script>

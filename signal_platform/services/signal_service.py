@@ -157,6 +157,24 @@ class SignalService:
             .all()
         )
 
+    @staticmethod
+    def grade_signal(confidence: float, win_rate_pct: float) -> SignalGrade:
+        """
+        Grade a signal from confidence and historical win-rate percentage.
+
+        Parameters
+        ----------
+        confidence:
+            Value in [0, 1].
+        win_rate_pct:
+            Percentage value in [0, 100].
+        """
+        if not 0 <= confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        if not 0 <= win_rate_pct <= 100:
+            raise ValueError("win_rate_pct must be between 0 and 100")
+        return _compute_grade(confidence, win_rate_pct / 100.0)
+
     # ── Internal helpers ────────────────────────────────────────────────
 
     @staticmethod

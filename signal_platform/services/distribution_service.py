@@ -33,6 +33,7 @@ from signal_platform.models import (
     SubscriptionTier,
     User,
 )
+from signal_platform.schemas import DeliveryStatusResponse
 
 logger = logging.getLogger(__name__)
 
@@ -133,12 +134,13 @@ class DistributionService:
     @staticmethod
     def delivery_status(
         db: Session, signal_id: int
-    ) -> List[SignalDelivery]:
-        return (
+    ) -> List[DeliveryStatusResponse]:
+        rows = (
             db.query(SignalDelivery)
             .filter(SignalDelivery.signal_id == signal_id)
             .all()
         )
+        return [DeliveryStatusResponse.model_validate(row) for row in rows]
 
 
 # ── Internal helpers ────────────────────────────────────────────────────
