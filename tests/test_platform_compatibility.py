@@ -49,6 +49,11 @@ class PlatformCompatibilityTests(unittest.TestCase):
         static_dashboard = Path(signal_platform.__file__).resolve().parent / "static" / "dashboard.html"
         self.assertTrue(static_dashboard.exists())
 
+    def test_top_level_packages_have_init_files(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        for package in ("exchanges", "models", "monetization"):
+            self.assertTrue((repo_root / package / "__init__.py").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
