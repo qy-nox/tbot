@@ -19,7 +19,7 @@ def grid_search(params: dict[str, list], scorer: Callable[[dict], float]) -> tup
                 best_score = score
             return
         key = keys[index]
-        for value in params.get(key, []):
+        for value in params[key]:
             current[key] = value
             _walk(index + 1, current)
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-import pickle
 from typing import Any
+
+import joblib
 
 from config.settings import BASE_DIR
 
@@ -20,11 +21,9 @@ class ModelCache:
         path = self.cache_dir / f"{name}.pkl"
         if not path.exists():
             return None
-        with path.open("rb") as fh:
-            return pickle.load(fh)
+        return joblib.load(path)
 
     def save(self, name: str, model: Any) -> Path:
         path = self.cache_dir / f"{name}.pkl"
-        with path.open("wb") as fh:
-            pickle.dump(model, fh)
+        joblib.dump(model, path)
         return path

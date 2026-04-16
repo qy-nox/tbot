@@ -12,7 +12,18 @@ class AdvancedSentimentAnalyzer:
         self.onchain = OnChainAnalyzer()
 
     def analyse(self, pair: str) -> dict:
-        s = self.sentiment.analyse(pair)
-        oc = self.onchain.analyse(pair)
-        score = (s.score + oc.get("composite_score", 0.0)) / 2
-        return {"label": s.label, "score": score, "impact": s.impact, "onchain": oc}
+        s = self.sentiment.analyse_headlines([pair])
+        oc_metrics = self.onchain.get_metrics(pair)
+        onchain_score = float(oc_metrics.sentiment_score or 0.0)
+        score = (float(s.combined_score) + onchain_score) / 2
+        return {
+            "label": s.label,
+            "score": score,
+            "impact": s.impact,
+            "onchain": {
+                "sentiment_score": onchain_score,
+                "active_addresses_24h": oc_metrics.active_addresses_24h,
+                "transaction_count_24h": oc_metrics.transaction_count_24h,
+                "mempool_size": oc_metrics.mempool_size,
+            },
+        }

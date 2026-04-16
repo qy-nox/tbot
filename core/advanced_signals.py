@@ -17,5 +17,5 @@ class AdvancedSignalGenerator:
 
     def generate(self, pair: str, df: pd.DataFrame):
         analysis = self.indicators.compute_all(df)
-        sentiment = self.sentiment.analyse(pair)
+        sentiment = self.sentiment.analyse_headlines([pair])
         return self.strategy.evaluate(pair=pair, analysis=analysis, sentiment=sentiment, atr=analysis.get("atr"))

@@ -9,7 +9,7 @@ class PortfolioManager:
         self.positions: dict[str, dict] = {}
 
     def can_open(self, pair: str) -> bool:
-        return pair in self.positions or len(self.positions) < self.max_positions
+        return pair not in self.positions and len(self.positions) < self.max_positions
 
     def open_position(self, pair: str, payload: dict) -> bool:
         if not self.can_open(pair):

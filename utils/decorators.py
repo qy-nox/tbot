@@ -7,6 +7,10 @@ from time import perf_counter
 
 
 def timed(fn):
+    """Measure function execution time and store last value on wrapper.
+
+    The most recent elapsed seconds can be accessed via ``wrapped.last_elapsed``.
+    """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         start = perf_counter()
