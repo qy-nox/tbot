@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 
 class PlatformCompatibilityTests(unittest.TestCase):
@@ -16,6 +17,28 @@ class PlatformCompatibilityTests(unittest.TestCase):
         from utils.database_v2 import init_db
 
         self.assertTrue(callable(init_db))
+
+    def test_new_support_modules_import(self):
+        from bots.bot2_admin.database import open_session as admin_open_session
+        from config.bot_config import BotConfig, bot_config
+        from database.migrations import run_migrations
+        from signal_platform import constants, exceptions, utils
+        from utils import helpers, validators
+
+        self.assertTrue(callable(admin_open_session))
+        self.assertIsInstance(bot_config, BotConfig)
+        self.assertTrue(callable(run_migrations))
+        self.assertEqual(constants.DEFAULT_TIMEZONE, "UTC")
+        self.assertTrue(issubclass(exceptions.PlatformError, Exception))
+        self.assertTrue(callable(utils.utcnow))
+        self.assertTrue(validators.is_valid_email("test@example.com"))
+        self.assertEqual(list(helpers.chunks([1, 2, 3], 2)), [[1, 2], [3]])
+
+    def test_dashboard_static_template_exists(self):
+        import signal_platform
+
+        static_dashboard = Path(signal_platform.__file__).resolve().parent / "static" / "dashboard.html"
+        self.assertTrue(static_dashboard.exists())
 
 
 if __name__ == "__main__":
