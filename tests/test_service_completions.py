@@ -12,7 +12,7 @@ class ServiceCompletionsTests(unittest.TestCase):
         self.assertEqual(SignalService.grade_signal(0.62, 20.0), SignalGrade.B)
 
     def test_bot3_handler_invalid_signal(self):
-        self.assertEqual(handle_distribute(db=None, signal=None), "Invalid or missing signal")
+        self.assertEqual(handle_distribute(db=None, signal=None), (False, "Invalid or missing signal"))
 
     def test_schema_contains_all_platform_tables(self):
         schema = (Path(__file__).resolve().parent.parent / "database" / "schema.sql").read_text()
@@ -25,4 +25,3 @@ class ServiceCompletionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

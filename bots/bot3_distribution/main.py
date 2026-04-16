@@ -16,8 +16,8 @@ def main() -> None:
     db = get_session()
     try:
         signal = db.get(SignalRecord, args.signal_id)
-        message = handle_distribute(db, signal)
-        if message == "Invalid or missing signal":
+        ok, message = handle_distribute(db, signal)
+        if not ok:
             raise SystemExit(message)
         print(message)
     finally:
