@@ -1,4 +1,5 @@
 import unittest
+import importlib
 from pathlib import Path
 
 
@@ -48,6 +49,22 @@ class PlatformCompatibilityTests(unittest.TestCase):
 
         static_dashboard = Path(signal_platform.__file__).resolve().parent / "static" / "dashboard.html"
         self.assertTrue(static_dashboard.exists())
+
+    def test_top_level_packages_have_init_files(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        for package in ("exchanges", "models", "monetization"):
+            self.assertTrue((repo_root / package / "__init__.py").exists())
+            self.assertIsNotNone(importlib.import_module(package))
+
+    def test_dashboard_route_is_registered(self):
+        from fastapi.testclient import TestClient
+        from signal_platform.api.app import app
+
+        client = TestClient(app)
+        response = client.get("/dashboard/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers.get("content-type", ""))
+        self.assertIn("Trading Signal Dashboard", response.text)
 
 
 if __name__ == "__main__":
