@@ -4,6 +4,15 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     command: ["python", "main.py", "--both"]
     ports:
       - "8000:8000"
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"

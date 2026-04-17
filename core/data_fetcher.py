@@ -5,6 +5,8 @@ funding rates, and volume profiles from various sources.
 """
 
 import logging
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +16,8 @@ import pandas as pd
 import requests
 
 from config.settings import Settings
+from core.security import ensure_valid_pair
+from utils.validators import validate_required_columns
 
 logger = logging.getLogger("trading_bot.data_fetcher")
 
@@ -24,6 +28,8 @@ class DataFetcher:
     def __init__(self) -> None:
         self.exchange = self._init_exchange()
         self.finnhub_key = Settings.FINNHUB_API_KEY
+        self._ohlcv_cache: dict[tuple[str, str, int], tuple[float, pd.DataFrame]] = {}
+        self._cache_lock = threading.Lock()
 
     # ── Exchange Initialisation ────────────────────────────────────────
 
@@ -54,24 +60,71 @@ class DataFetcher:
         limit: int | None = None,
     ) -> pd.DataFrame:
         """Fetch OHLCV candle data and return a DataFrame."""
+        symbol = ensure_valid_pair(symbol)
         timeframe = timeframe or Settings.TIMEFRAME
         limit = limit or Settings.CANDLE_LIMIT
+        cache_key = (symbol, timeframe, limit)
+        with self._cache_lock:
+            cached = self._ohlcv_cache.get(cache_key)
+            now = time.time()
+            if cached and now - cached[0] <= Settings.OHLCV_CACHE_TTL_SECONDS:
+                return cached[1].copy()
 
+        for attempt in range(1, Settings.EXCHANGE_RETRY_ATTEMPTS + 1):
+            try:
+                raw = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+                df = pd.DataFrame(
+                    raw, columns=["timestamp", "open", "high", "low", "close", "volume"]
+                )
+                validate_required_columns(df.columns, ("timestamp", "open", "high", "low", "close", "volume"))
+                df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+                df.set_index("timestamp", inplace=True)
+                df = df.astype(float)
+                if self._is_stale(df, timeframe):
+                    logger.warning("Discarded stale OHLCV data for %s (%s)", symbol, timeframe)
+                    return pd.DataFrame()
+                with self._cache_lock:
+                    if len(self._ohlcv_cache) >= Settings.OHLCV_CACHE_MAX_ENTRIES:
+                        oldest_key = min(self._ohlcv_cache, key=lambda k: self._ohlcv_cache[k][0])
+                        self._ohlcv_cache.pop(oldest_key, None)
+                    self._ohlcv_cache[cache_key] = (time.time(), df.copy())
+                logger.info("Fetched %d candles for %s (%s)", len(df), symbol, timeframe)
+                return df
+            except (ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.RequestTimeout) as exc:
+                if attempt >= Settings.EXCHANGE_RETRY_ATTEMPTS:
+                    logger.error("Transient exchange error fetching OHLCV for %s: %s", symbol, exc)
+                    return pd.DataFrame()
+                delay = min(Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), 30.0)
+                logger.warning("Retrying OHLCV fetch for %s in %.2fs (%s)", symbol, delay, exc)
+                time.sleep(delay)
+            except ccxt.BaseError as exc:
+                logger.error("CCXT error fetching OHLCV for %s: %s", symbol, exc)
+                return pd.DataFrame()
+
+        return pd.DataFrame()
+
+    @staticmethod
+    def _timeframe_to_seconds(timeframe: str) -> int:
+        unit = timeframe[-1]
         try:
-            raw = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-            df = pd.DataFrame(
-                raw, columns=["timestamp", "open", "high", "low", "close", "volume"]
-            )
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-            df.set_index("timestamp", inplace=True)
-            df = df.astype(float)
-            logger.info(
-                "Fetched %d candles for %s (%s)", len(df), symbol, timeframe
-            )
-            return df
-        except ccxt.BaseError as exc:
-            logger.error("CCXT error fetching OHLCV for %s: %s", symbol, exc)
-            return pd.DataFrame()
+            value = int(timeframe[:-1])
+        except ValueError:
+            logger.warning("Invalid timeframe format: %s", timeframe)
+            return 0
+        scale = {"m": 60, "h": 3600, "d": 86400}.get(unit, 0)
+        return value * scale
+
+    def _is_stale(self, df: pd.DataFrame, timeframe: str) -> bool:
+        if df.empty:
+            return True
+        if df.index.tz is None:
+            return True
+        latest_ts = df.index[-1]
+        tf_seconds = self._timeframe_to_seconds(timeframe)
+        if tf_seconds <= 0:
+            return False
+        data_age_seconds = (datetime.now(timezone.utc) - latest_ts.to_pydatetime()).total_seconds()
+        return data_age_seconds > tf_seconds * 3
 
     # ── Ticker / Current Price ─────────────────────────────────────────
 

@@ -23,11 +23,14 @@ from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
+from config.settings import Settings
+from core.security import check_rate_limit, rate_limit_key_from_identity
 from signal_platform.auth import decode_token
 from dashboard.backend.api import router as dashboard_backend_router
 from signal_platform.models import (
@@ -109,7 +112,23 @@ if _STATIC_DIR.exists():
 
 
 @app.get("/admin/", include_in_schema=False)
-def admin_website():
+def admin_website(request: Request):
+    if Settings.ADMIN_DASHBOARD_REQUIRE_AUTH:
+        auth_header = request.headers.get("authorization", "")
+        scheme, _, token = auth_header.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        try:
+            payload = decode_token(token)
+        except InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        db = get_session()
+        try:
+            user = UserService.get_by_id(db, int(payload["sub"]))
+            if user is None or not user.is_admin:
+                raise HTTPException(status_code=403, detail="Admin access required")
+        finally:
+            db.close()
     admin_page = _STATIC_DIR / "admin.html"
     if admin_page.exists():
         return FileResponse(admin_page)
@@ -130,6 +149,33 @@ def _db():
         yield db
     finally:
         db.close()
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    auth_header = request.headers.get("authorization", "")
+    identity = auth_header if auth_header.lower().startswith("bearer ") else None
+    client_host = request.client.host if request.client and request.client.host else ""
+    if not client_host and not identity:
+        return JSONResponse(status_code=400, content={"detail": "Unable to determine client identity"})
+    if not client_host:
+        client_host = "authenticated-client"
+    key = rate_limit_key_from_identity(
+        client_host,
+        identity,
+    )
+    allowed = check_rate_limit(
+        scope="api",
+        key=key,
+        limit=Settings.API_RATE_LIMIT_PER_MINUTE,
+        window_seconds=60,
+    )
+    if not allowed:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={"detail": "Rate limit exceeded"},
+        )
+    return await call_next(request)
 
 
 def _current_user(

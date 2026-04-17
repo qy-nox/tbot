@@ -11,6 +11,7 @@ import subprocess
 import time
 import signal
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ class BotManager:
     NO_TOKEN_REQUIRED = "__NO_TOKEN_REQUIRED__"
     
     def __init__(self):
+        self._lock = threading.Lock()
         self.processes: list[dict[str, Any]] = []
         raw_restart_limit = os.getenv("BOT_RESTART_LIMIT", "3")
         try:
@@ -120,7 +122,8 @@ class BotManager:
                     continue
 
                 process = self._start_process(bot, i)
-                self.processes.append({"process": process, "bot": bot, "restarts": 0})
+                with self._lock:
+                    self.processes.append({"process": process, "bot": bot, "restarts": 0})
                 
                 # Wait between starting bots
                 if i < len(self.bots):
@@ -154,30 +157,37 @@ class BotManager:
         try:
             while True:
                 # Check if any process died
-                for i, process_info in enumerate(self.processes):
+                with self._lock:
+                    snapshot = list(self.processes)
+                for process_info in snapshot:
                     if process_info.get("disabled"):
                         continue
+
                     process = process_info["process"]
-                    if process.poll() is not None:
-                        bot_name = process_info["bot"]["name"]
-                        restarts = process_info["restarts"]
-                        logger.warning(f"⚠️  {bot_name} terminated (exit code: {process.returncode})")
+                    if process.poll() is None:
+                        continue
 
-                        if restarts >= self.max_restarts:
-                            logger.error(f"❌ {bot_name} reached restart limit ({self.max_restarts})")
+                    bot_name = process_info["bot"]["name"]
+                    restarts = process_info["restarts"]
+                    logger.warning(f"⚠️  {bot_name} terminated (exit code: {process.returncode})")
+
+                    if restarts >= self.max_restarts:
+                        with self._lock:
                             process_info["disabled"] = True
-                            continue
+                        logger.error(f"❌ {bot_name} reached restart limit ({self.max_restarts})")
+                        continue
 
-                        logger.info(f"🔁 Restarting {bot_name} (attempt {restarts + 1}/{self.max_restarts})")
-                        time.sleep(2)
-                        restarted = subprocess.Popen(
-                            process_info["bot"]["cmd"],
-                            cwd=PROJECT_ROOT,
-                            start_new_session=True,
-                        )
+                    logger.info(f"🔁 Restarting {bot_name} (attempt {restarts + 1}/{self.max_restarts})")
+                    time.sleep(2)
+                    restarted = subprocess.Popen(
+                        process_info["bot"]["cmd"],
+                        cwd=PROJECT_ROOT,
+                        start_new_session=True,
+                    )
+                    with self._lock:
                         process_info["process"] = restarted
                         process_info["restarts"] = restarts + 1
-                        logger.info(f"    ✅ Restarted {bot_name} (PID: {restarted.pid})")
+                    logger.info(f"    ✅ Restarted {bot_name} (PID: {restarted.pid})")
                 
                 time.sleep(1)
                 
@@ -187,7 +197,9 @@ class BotManager:
     
     def cleanup(self):
         """Stop all processes"""
-        for i, process_info in enumerate(self.processes):
+        with self._lock:
+            snapshot = list(self.processes)
+        for i, process_info in enumerate(snapshot):
             process = process_info["process"]
             try:
                 process.terminate()
