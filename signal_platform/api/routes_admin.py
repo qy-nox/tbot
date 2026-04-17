@@ -37,5 +37,9 @@ def approve_signal(signal_id: int, db: Session = Depends(_db)):
     if not signal:
         raise HTTPException(status_code=404, detail="Signal not found")
     signal.approved = True
-    db.commit()
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to approve signal: {exc}") from exc
     return {"status": "approved"}

@@ -25,7 +25,8 @@ def handle_market() -> dict[str, object]:
     return get_live_market_status()
 
 
-def handle_signals(db, *, limit: int = 20) -> str:
+def handle_signals(db, *, limit: int = 10) -> str:
+    """Fetch pending signals and return Telegram-formatted output."""
     active = (
         db.query(SignalRecord)
         .filter(SignalRecord.outcome == SignalOutcome.PENDING)

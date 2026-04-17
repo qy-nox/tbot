@@ -74,7 +74,7 @@ class EcosystemCompatibilityTests(unittest.TestCase):
         client = TestClient(app)
         response = client.get("/admin/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("TBot Admin Dashboard", response.text)
+        self.assertIn("TBOT Admin Dashboard", response.text)
 
 
 if __name__ == "__main__":
