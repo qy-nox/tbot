@@ -262,7 +262,9 @@ class TradingBot:
     def _store_signal(signal) -> None:
         session = get_session()
         try:
-            duplicate_since = datetime.now(timezone.utc) - timedelta(minutes=5)
+            duplicate_since = datetime.now(timezone.utc) - timedelta(
+                minutes=Settings.SIGNAL_DEDUP_WINDOW_MINUTES
+            )
             existing = (
                 session.query(SignalModel)
                 .filter(

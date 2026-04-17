@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import logging
 import threading
 import time
@@ -20,6 +21,8 @@ F = TypeVar("F", bound=Callable[..., Any])
 _SENSITIVE_KEYS = ("api_key", "apikey", "secret", "token", "password", "passphrase")
 _RATE_LOCK = threading.Lock()
 _RATE_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+_REDIS_CLIENT = None
+_REDIS_LOCK = threading.Lock()
 
 
 def redact_sensitive(text: str) -> str:
@@ -42,6 +45,7 @@ def ensure_valid_pair(pair: str) -> str:
 def retry_with_backoff(
     max_attempts: int = 3,
     base_delay: float = 1.0,
+    max_delay: float = 30.0,
     exceptions: tuple[type[Exception], ...] = (Exception,),
 ) -> Callable[[F], F]:
     """Retry a function with exponential backoff."""
@@ -57,7 +61,7 @@ def retry_with_backoff(
                     last_error = exc
                     if attempt >= max_attempts:
                         break
-                    sleep_for = base_delay * (2 ** (attempt - 1))
+                    sleep_for = min(base_delay * (2 ** (attempt - 1)), max_delay)
                     logger.warning(
                         "Retrying %s after %s (attempt %d/%d)",
                         func.__name__,
@@ -79,7 +83,11 @@ def check_rate_limit(scope: str, key: str, limit: int, window_seconds: int) -> b
         try:
             import redis
 
-            client = redis.Redis.from_url(Settings.REDIS_URL, decode_responses=True)
+            global _REDIS_CLIENT
+            with _REDIS_LOCK:
+                if _REDIS_CLIENT is None:
+                    _REDIS_CLIENT = redis.Redis.from_url(Settings.REDIS_URL, decode_responses=True)
+                client = _REDIS_CLIENT
             bucket = f"tbot:rl:{scope}:{key}:{int(time.time() // window_seconds)}"
             hits = int(client.incr(bucket))
             if hits == 1:
@@ -98,3 +106,11 @@ def check_rate_limit(scope: str, key: str, limit: int, window_seconds: int) -> b
             return False
         dq.append(now)
     return True
+
+
+def rate_limit_key_from_identity(ip: str, identity: str | None) -> str:
+    """Build a stable rate-limit key from user identity or fallback IP."""
+    if identity:
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+        return f"user:{digest}"
+    return f"ip:{ip or 'unknown'}"

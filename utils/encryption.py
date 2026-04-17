@@ -11,7 +11,9 @@ from config.settings import Settings
 
 
 def _build_fernet_key() -> bytes:
-    raw = (Settings.ENCRYPTION_KEY or "tbot-default-dev-key").encode("utf-8")
+    if not Settings.ENCRYPTION_KEY:
+        raise ValueError("ENCRYPTION_KEY must be configured")
+    raw = Settings.ENCRYPTION_KEY.encode("utf-8")
     digest = hashlib.sha256(raw).digest()
     return base64.urlsafe_b64encode(digest)
 

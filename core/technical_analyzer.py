@@ -335,7 +335,7 @@ class TechnicalAnalyzer:
         trend = self.detect_trend(df)
 
         result = {
-            "rsi": float(np.clip(rsi.iloc[-1], 0, 100)) if not rsi.empty and pd.notna(rsi.iloc[-1]) else None,
+            "rsi": float(rsi.iloc[-1]) if not rsi.empty and pd.notna(rsi.iloc[-1]) else None,
             "ema_fast": emas["ema_fast"].iloc[-1],
             "ema_medium": emas["ema_medium"].iloc[-1],
             "ema_slow": emas["ema_slow"].iloc[-1],

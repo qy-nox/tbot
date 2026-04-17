@@ -5,6 +5,7 @@ funding rates, and volume profiles from various sources.
 """
 
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -28,6 +29,7 @@ class DataFetcher:
         self.exchange = self._init_exchange()
         self.finnhub_key = Settings.FINNHUB_API_KEY
         self._ohlcv_cache: dict[tuple[str, str, int], tuple[float, pd.DataFrame]] = {}
+        self._cache_lock = threading.Lock()
 
     # ── Exchange Initialisation ────────────────────────────────────────
 
@@ -62,10 +64,11 @@ class DataFetcher:
         timeframe = timeframe or Settings.TIMEFRAME
         limit = limit or Settings.CANDLE_LIMIT
         cache_key = (symbol, timeframe, limit)
-        cached = self._ohlcv_cache.get(cache_key)
-        now = time.time()
-        if cached and now - cached[0] <= Settings.OHLCV_CACHE_TTL_SECONDS:
-            return cached[1].copy()
+        with self._cache_lock:
+            cached = self._ohlcv_cache.get(cache_key)
+            now = time.time()
+            if cached and now - cached[0] <= Settings.OHLCV_CACHE_TTL_SECONDS:
+                return cached[1].copy()
 
         for attempt in range(1, Settings.EXCHANGE_RETRY_ATTEMPTS + 1):
             try:
@@ -80,14 +83,18 @@ class DataFetcher:
                 if self._is_stale(df, timeframe):
                     logger.warning("Discarded stale OHLCV data for %s (%s)", symbol, timeframe)
                     return pd.DataFrame()
-                self._ohlcv_cache[cache_key] = (time.time(), df.copy())
+                with self._cache_lock:
+                    if len(self._ohlcv_cache) >= Settings.OHLCV_CACHE_MAX_ENTRIES:
+                        oldest_key = min(self._ohlcv_cache, key=lambda k: self._ohlcv_cache[k][0])
+                        self._ohlcv_cache.pop(oldest_key, None)
+                    self._ohlcv_cache[cache_key] = (time.time(), df.copy())
                 logger.info("Fetched %d candles for %s (%s)", len(df), symbol, timeframe)
                 return df
             except (ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.RequestTimeout) as exc:
                 if attempt >= Settings.EXCHANGE_RETRY_ATTEMPTS:
                     logger.error("Transient exchange error fetching OHLCV for %s: %s", symbol, exc)
                     return pd.DataFrame()
-                delay = Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1))
+                delay = min(Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), 30.0)
                 logger.warning("Retrying OHLCV fetch for %s in %.2fs (%s)", symbol, delay, exc)
                 time.sleep(delay)
             except ccxt.BaseError as exc:
@@ -102,6 +109,7 @@ class DataFetcher:
         try:
             value = int(timeframe[:-1])
         except ValueError:
+            logger.warning("Invalid timeframe format: %s", timeframe)
             return 0
         scale = {"m": 60, "h": 3600, "d": 86400}.get(unit, 0)
         return value * scale
@@ -115,8 +123,8 @@ class DataFetcher:
         tf_seconds = self._timeframe_to_seconds(timeframe)
         if tf_seconds <= 0:
             return False
-        staleness_seconds = (datetime.now(timezone.utc) - latest_ts.to_pydatetime()).total_seconds()
-        return staleness_seconds > tf_seconds * 3
+        data_age_seconds = (datetime.now(timezone.utc) - latest_ts.to_pydatetime()).total_seconds()
+        return data_age_seconds > tf_seconds * 3
 
     # ── Ticker / Current Price ─────────────────────────────────────────
 

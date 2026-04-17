@@ -30,7 +30,7 @@ from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from config.settings import Settings
-from core.security import check_rate_limit
+from core.security import check_rate_limit, rate_limit_key_from_identity
 from signal_platform.auth import decode_token
 from dashboard.backend.api import router as dashboard_backend_router
 from signal_platform.models import (
@@ -153,7 +153,17 @@ def _db():
 
 @app.middleware("http")
 async def _rate_limit_middleware(request: Request, call_next):
-    key = request.client.host if request.client else "unknown"
+    auth_header = request.headers.get("authorization", "")
+    identity = auth_header if auth_header.lower().startswith("bearer ") else None
+    client_host = request.client.host if request.client and request.client.host else ""
+    if not client_host and not identity:
+        return JSONResponse(status_code=400, content={"detail": "Unable to determine client identity"})
+    if not client_host:
+        client_host = "authenticated-client"
+    key = rate_limit_key_from_identity(
+        client_host,
+        identity,
+    )
     allowed = check_rate_limit(
         scope="api",
         key=key,

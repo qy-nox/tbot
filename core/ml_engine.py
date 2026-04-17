@@ -12,6 +12,7 @@ import hmac
 import hashlib
 import io
 import pickle
+import threading
 import time
 from base64 import b64decode, b64encode
 from dataclasses import dataclass
@@ -33,16 +34,30 @@ ALLOWED_PICKLE_MODULE_PREFIXES = (
     "numpy.",
     "scipy.",
     "pandas.",
-    "builtins",
     "collections.",
     "copyreg",
     "joblib.",
 )
+ALLOWED_BUILTINS = {
+    "dict",
+    "list",
+    "set",
+    "tuple",
+    "str",
+    "int",
+    "float",
+    "bool",
+    "bytes",
+    "bytearray",
+    "complex",
+    "slice",
+    "object",
+}
 
 
 class _RestrictedUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
-        if module == "builtins":
+        if module == "builtins" and name in ALLOWED_BUILTINS:
             return super().find_class(module, name)
         if any(module.startswith(prefix) for prefix in ALLOWED_PICKLE_MODULE_PREFIXES):
             return super().find_class(module, name)
@@ -66,6 +81,7 @@ class MLEngine:
         self.models: dict = {}
         self._is_trained = False
         self._last_used_at = time.time()
+        self._model_lock = threading.RLock()
         MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         self._try_load_cached()
 
@@ -241,8 +257,9 @@ class MLEngine:
             logger.exception("GradientBoosting training failed")
 
         if self.models:
-            self._is_trained = True
-            self._last_used_at = time.time()
+            with self._model_lock:
+                self._is_trained = True
+                self._last_used_at = time.time()
             self._save_cache()
 
         return results
@@ -251,10 +268,20 @@ class MLEngine:
 
     def predict(self, df: pd.DataFrame) -> Optional[MLPrediction]:
         """Run the ensemble and return a voted prediction."""
-        self._unload_if_idle()
-        if not self._is_trained or not self.models:
-            logger.debug("ML engine not trained – skipping prediction")
-            return None
+        with self._model_lock:
+            self._unload_if_idle()
+            ready = self._is_trained and bool(self.models)
+
+        if not ready:
+            self._try_load_cached()
+            with self._model_lock:
+                if not self._is_trained or not self.models:
+                    logger.debug("ML engine not trained – skipping prediction")
+                    return None
+                models_snapshot = list(self.models.items())
+        else:
+            with self._model_lock:
+                models_snapshot = list(self.models.items())
 
         validate_required_columns(df.columns, ("open", "high", "low", "close", "volume"))
         features = self.build_features(df)
@@ -266,7 +293,7 @@ class MLEngine:
         probabilities: dict[str, float] = {}
         label_map = {1: "BUY", -1: "SELL", 0: "HOLD"}
 
-        for name, model in self.models.items():
+        for name, model in models_snapshot:
             try:
                 pred = model.predict(last_row)[0]
                 proba = model.predict_proba(last_row)[0]
@@ -303,14 +330,17 @@ class MLEngine:
             prediction.confidence * 100,
             prediction.votes,
         )
-        self._last_used_at = time.time()
+        with self._model_lock:
+            self._last_used_at = time.time()
         return prediction
 
     # ── Model caching ───────────────────────────────────────────────────
 
     def _save_cache(self) -> None:
         """Persist trained models to disk."""
-        for name, model in self.models.items():
+        with self._model_lock:
+            models_snapshot = list(self.models.items())
+        for name, model in models_snapshot:
             path = MODEL_CACHE_DIR / f"{name}.pkl"
             try:
                 with open(path, "wb") as fh:
@@ -338,27 +368,33 @@ class MLEngine:
                     if not hmac.compare_digest(stored["signature"], self._sign(payload)):
                         logger.warning("Skipping tampered model cache %s", path)
                         continue
-                    self.models[name] = _RestrictedUnpickler(io.BytesIO(payload)).load()
-                    loaded += 1
+                    model = _RestrictedUnpickler(io.BytesIO(payload)).load()
+                    with self._model_lock:
+                        self.models[name] = model
+                        loaded += 1
                 except Exception:
                     logger.exception("Failed to load cached model %s", name)
         if loaded > 0:
-            self._is_trained = True
-            self._last_used_at = time.time()
+            with self._model_lock:
+                self._is_trained = True
+                self._last_used_at = time.time()
             logger.info("Loaded %d cached ML models", loaded)
 
     def _sign(self, payload: bytes) -> str:
+        if not Settings.MODEL_SIGNING_KEY:
+            raise ValueError("MODEL_SIGNING_KEY must be configured")
         key = Settings.MODEL_SIGNING_KEY.encode("utf-8")
         return hmac.new(key, payload, hashlib.sha256).hexdigest()
 
     def _unload_if_idle(self) -> None:
-        if not self.models:
-            return
-        if (time.time() - self._last_used_at) <= Settings.ML_MODEL_MAX_IDLE_SECONDS:
-            return
-        logger.info("Unloading idle ML models from memory")
-        self.models.clear()
-        self._is_trained = False
+        with self._model_lock:
+            if not self.models:
+                return
+            if (time.time() - self._last_used_at) <= Settings.ML_MODEL_MAX_IDLE_SECONDS:
+                return
+            logger.info("Unloading idle ML models from memory")
+            self.models.clear()
+            self._is_trained = False
 
     @property
     def is_ready(self) -> bool:

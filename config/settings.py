@@ -131,14 +131,16 @@ class Settings:
     EXCHANGE_RETRY_ATTEMPTS: int = int(os.getenv("EXCHANGE_RETRY_ATTEMPTS", "3"))
     EXCHANGE_RETRY_BACKOFF_SECONDS: float = float(os.getenv("EXCHANGE_RETRY_BACKOFF_SECONDS", "1.0"))
     OHLCV_CACHE_TTL_SECONDS: int = int(os.getenv("OHLCV_CACHE_TTL_SECONDS", "30"))
+    OHLCV_CACHE_MAX_ENTRIES: int = int(os.getenv("OHLCV_CACHE_MAX_ENTRIES", "256"))
 
     # ── Security ───────────────────────────────────────────────────────
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
-    MODEL_SIGNING_KEY: str = os.getenv("MODEL_SIGNING_KEY", ENCRYPTION_KEY or "dev-model-signing-key")
+    MODEL_SIGNING_KEY: str = os.getenv("MODEL_SIGNING_KEY", "")
     REDIS_URL: str = os.getenv("REDIS_URL", "")
     API_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("API_RATE_LIMIT_PER_MINUTE", "120"))
     ML_MODEL_MAX_IDLE_SECONDS: int = int(os.getenv("ML_MODEL_MAX_IDLE_SECONDS", "1800"))
     ADMIN_DASHBOARD_REQUIRE_AUTH: bool = os.getenv("ADMIN_DASHBOARD_REQUIRE_AUTH", "false").lower() == "true"
+    SIGNAL_DEDUP_WINDOW_MINUTES: int = int(os.getenv("SIGNAL_DEDUP_WINDOW_MINUTES", "5"))
 
     # ── Logging ────────────────────────────────────────────────────────
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
