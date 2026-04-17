@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ssl
 from datetime import datetime, timezone
 from json import loads
 from urllib.request import urlopen
@@ -24,7 +25,12 @@ class FearGreedIndex:
 
     def fetch(self) -> FearGreedReading:
         try:
-            with urlopen(self.API_URL, timeout=self.timeout_seconds) as response:
+            ssl_context = ssl.create_default_context()
+            with urlopen(self.API_URL, timeout=self.timeout_seconds, context=ssl_context) as response:
+                content_type = (response.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+                allowed_content_types = {"application/json", "text/json"}
+                if content_type not in allowed_content_types:
+                    raise ValueError("unexpected content type")
                 payload = loads(response.read().decode("utf-8"))
             item = (payload.get("data") or [{}])[0]
             value = int(item.get("value", 50))

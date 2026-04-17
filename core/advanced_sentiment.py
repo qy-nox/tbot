@@ -40,18 +40,20 @@ class AdvancedSentiment:
         consensus: SentimentConsensusScorer | None = None,
         fear_greed_index: FearGreedIndex | None = None,
         sentiment_analyzer: Any | None = None,
+        fear_greed_weight: float = 0.8,
     ):
         self.news_aggregator = news_aggregator or NewsAggregator()
         self.consensus = consensus or SentimentConsensusScorer()
         self.fear_greed_index = fear_greed_index or FearGreedIndex()
         self.sentiment_analyzer = sentiment_analyzer or _build_default_sentiment_analyzer()
+        self.fear_greed_weight = max(0.0, float(fear_greed_weight))
 
     def analyze(self, providers: dict | None = None) -> dict:
         news_items = self.news_aggregator.aggregate(providers=providers)
         sources: list[SourceSentiment] = []
 
         for item in news_items:
-            headline_score = self.sentiment_analyzer.analyse_headline(item.title)
+            headline_score = self._analyze_headline(item.title)
             sources.append(
                 SourceSentiment(
                     name=item.source,
@@ -67,7 +69,7 @@ class AdvancedSentiment:
             SourceSentiment(
                 name="fear_greed",
                 score=fear_greed_score,
-                weight=0.8,
+                weight=self.fear_greed_weight,
                 metadata={
                     "value": fear_greed.value,
                     "classification": fear_greed.classification,
@@ -95,7 +97,19 @@ class AdvancedSentiment:
         }
 
     def analyse(self, providers: dict | None = None) -> dict:
+        """Compatibility alias for British spelling."""
         return self.analyze(providers=providers)
+
+    def _analyze_headline(self, headline: str) -> dict:
+        analyze_fn = getattr(self.sentiment_analyzer, "analyze_headline", None)
+        if callable(analyze_fn):
+            return analyze_fn(headline)
+
+        analyse_fn = getattr(self.sentiment_analyzer, "analyse_headline", None)
+        if callable(analyse_fn):
+            return analyse_fn(headline)
+
+        return _FallbackSentimentAnalyzer().analyse_headline(headline)
 
 
 class AdvancedSentimentAnalyzer(AdvancedSentiment):
