@@ -216,6 +216,7 @@ class SignalRecord(Base):
     actual_exit_price = Column(Float)
     pnl_percent = Column(Float)
     closed_at = Column(DateTime)
+    # Manual moderation flag used by /admin/signals/{signal_id}/approve.
     approved = Column(Boolean, default=False, nullable=False)
 
     # relationships

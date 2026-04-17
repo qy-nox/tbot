@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from signal_platform.models import SignalOutcome, SignalRecord, get_session
 
+MAX_DISPLAYED_SIGNALS = 10
+
 
 def format_signal_list(signals) -> str:
     """Format signals for Telegram display."""
@@ -11,7 +13,7 @@ def format_signal_list(signals) -> str:
         return "📊 No active signals"
 
     lines = ["📈 <b>Active Trading Signals:</b>\n"]
-    for signal in signals[:10]:
+    for signal in signals[:MAX_DISPLAYED_SIGNALS]:
         emoji = "📈" if signal.direction.value == "BUY" else "📉"
         lines.append(
             f"{emoji} <b>{signal.pair}</b> {signal.direction.value}\n"
