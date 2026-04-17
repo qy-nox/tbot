@@ -26,7 +26,16 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT tokens ──────────────────────────────────────────────────────────
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
+def _load_jwt_secret() -> str:
+    secret = (os.getenv("JWT_SECRET") or "").strip()
+    if not secret:
+        raise RuntimeError("JWT_SECRET must be set")
+    if secret == "change-me-in-production" or len(secret) < 32:
+        raise RuntimeError("JWT_SECRET is too weak; use a strong 32+ character secret")
+    return secret
+
+
+JWT_SECRET = _load_jwt_secret()
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))

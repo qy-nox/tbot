@@ -1,5 +1,7 @@
 import unittest
+import importlib
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -7,6 +9,7 @@ from config.settings import Settings
 from core.data_fetcher import DataFetcher
 from core.security import ensure_valid_pair
 from core.technical_analyzer import TechnicalAnalyzer
+from utils.logger import _mask_sensitive_values
 
 
 class _FakeExchange:
@@ -64,6 +67,20 @@ class SecurityStabilityTests(unittest.TestCase):
         fetcher = _TestFetcher(rows)
         result = fetcher.fetch_ohlcv("BTC/USDT", timeframe="1h")
         self.assertTrue(result.empty)
+
+    def test_logger_masks_secret_like_content(self):
+        masked = _mask_sensitive_values("BINANCE_API_KEY=abc123 TELEGRAM_BOT_TOKEN=def456")
+        self.assertNotIn("abc123", masked)
+        self.assertNotIn("def456", masked)
+
+    def test_jwt_secret_rejects_known_weak_default(self):
+        with patch.dict("os.environ", {"JWT_SECRET": "change-me-in-production"}):
+            with self.assertRaises(RuntimeError):
+                import signal_platform.auth as auth_mod
+                importlib.reload(auth_mod)
+        with patch.dict("os.environ", {"JWT_SECRET": "a" * 32}):
+            import signal_platform.auth as auth_mod
+            importlib.reload(auth_mod)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 from bots.bot_subscription.keyboard import continue_keyboard, payment_options_keyboard, plans_keyboard
 from bots.bot_subscription.payment_flow import begin_subscription, submit_transaction
 from bots.bot_subscription.storage import get_application
-from signal_platform.models import get_session
+from signal_platform.models import get_session, init_db
 from signal_platform.services.subscription_service import SubscriptionService
 
 
@@ -23,6 +23,7 @@ def handle_start() -> dict[str, object]:
 
 
 def handle_plans() -> dict[str, object]:
+    init_db()
     db = get_session()
     try:
         SubscriptionService.seed_plans(db)
