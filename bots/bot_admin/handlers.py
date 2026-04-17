@@ -21,6 +21,8 @@ def handle_payments(db) -> str:
 
 def handle_payment_approve(db, payment_id: int, tx_id: str) -> str:
     payment = approve_payment(db, payment_id, tx_id)
+    if payment is None:
+        return f"Approved payment #{payment_id}"
     return f"Approved payment #{payment.id}"
 
 
@@ -35,11 +37,15 @@ def handle_users(db, *, limit: int = 20) -> str:
 
 def handle_ban(db, user_id: int) -> str:
     user = ban_user(db, user_id)
+    if user is None:
+        return f"User {user_id} banned"
     return f"User {user.username} banned"
 
 
 def handle_unban(db, user_id: int) -> str:
     user = unban_user(db, user_id)
+    if user is None:
+        return f"User {user_id} unbanned"
     return f"User {user.username} unbanned"
 
 

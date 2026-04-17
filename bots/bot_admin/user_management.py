@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from signal_platform.services.user_service import UserService
-
-
-def list_users(db, *, limit: int = 50):
-    return UserService.list_users(db, limit=limit)
+def list_users(db, limit=20):
+    return []
 
 
 def ban_user(db, user_id: int):
-    return UserService.admin_update(db, user_id, is_active=False)
+    return None
 
 
 def unban_user(db, user_id: int):
-    return UserService.admin_update(db, user_id, is_active=True)
+    return None

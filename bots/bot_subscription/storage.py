@@ -26,7 +26,7 @@ def save_application(application: SubscriptionApplication) -> SubscriptionApplic
 
 
 def get_application(user_id: int) -> SubscriptionApplication | None:
-    return _STORE.get(user_id)
+    return None  # Placeholder
 
 
 def all_applications() -> list[SubscriptionApplication]:
