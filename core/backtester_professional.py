@@ -51,9 +51,11 @@ class ProfessionalBacktester:
     def monte_carlo(self, trade_pnls: list[float], iterations: int = 10_000) -> dict[str, float]:
         if not trade_pnls:
             return {"worst_drawdown": 0.0, "median_drawdown": 0.0}
+        if iterations < 1:
+            raise ValueError("iterations must be >= 1")
 
         drawdowns: list[float] = []
-        for _ in range(max(iterations, 1)):
+        for _ in range(iterations):
             shuffled = trade_pnls[:]
             random.shuffle(shuffled)
             summary = self.summarize(shuffled)

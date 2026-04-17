@@ -6,22 +6,22 @@ from __future__ import annotations
 class EntryExitEngine:
     def entry_signal(self, *, rsi: float, ema20: float, ema50: float, close: float, bb_lower: float, support: float | None = None, resistance: float | None = None) -> tuple[str, list[str]]:
         reasons: list[str] = []
-        direction = "HOLD"
+        buy_signal = False
 
         if rsi < 30 and ema20 > ema50:
-            direction = "BUY"
+            buy_signal = True
             reasons.append(f"RSI oversold ({rsi:.1f}) + EMA confirmation")
         if close <= bb_lower:
-            direction = "BUY"
+            buy_signal = True
             reasons.append("Bollinger lower band touch")
         if support is not None and abs(close - support) / max(close, 1e-9) <= 0.01:
-            direction = "BUY"
+            buy_signal = True
             reasons.append("Support bounce")
         if resistance is not None and close > resistance:
-            direction = "BUY"
+            buy_signal = True
             reasons.append("Breakout above resistance")
 
-        return direction, reasons
+        return ("BUY" if buy_signal else "HOLD"), reasons
 
     def build_targets(self, entry: float, stop_loss: float, direction: str) -> dict[str, float]:
         risk = abs(entry - stop_loss)

@@ -25,6 +25,13 @@ class SignalGenerator:
         validity_minutes: int = 120,
     ) -> dict:
         entry_delta = abs(entry_price) * 0.02
+        risk = abs(entry_price - stop_loss)
+        reward = abs(tp3 - entry_price)
+        risk_reward_ratio = "1:0"
+        if risk > 0:
+            rr_value = round(reward / risk, 2)
+            rr_text = str(int(rr_value)) if rr_value.is_integer() else str(rr_value)
+            risk_reward_ratio = f"1:{rr_text}"
         return {
             "pair": pair,
             "timeframe": timeframe,
@@ -39,7 +46,7 @@ class SignalGenerator:
                 "tp3": round(tp3, 8),
             },
             "stop_loss": round(stop_loss, 8),
-            "risk_reward_ratio": "1:3",
+            "risk_reward_ratio": risk_reward_ratio,
             "confidence": int(confidence),
             "explanation": explanation,
             "indicators": indicators,

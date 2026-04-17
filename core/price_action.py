@@ -116,8 +116,9 @@ class PriceActionAnalyzer:
         volume_avg = float(df["volume"].tail(20).mean()) if "volume" in df and not df["volume"].empty else 0.0
         volume_now = float(df["volume"].iloc[-1]) if "volume" in df else 0.0
 
-        breakout = any(close > level for level in levels["resistances"][-3:]) if levels["resistances"] else False
-        pullback = trend == "UPTREND" and len(df) > 2 and float(df["close"].iloc[-2]) < float(df["close"].iloc[-3])
+        recent_resistances = levels["resistances"][-3:] if levels["resistances"] else []
+        breakout = any(close > level for level in recent_resistances)
+        recent_dip = trend == "UPTREND" and len(df) > 2 and float(df["close"].iloc[-2]) < float(df["close"].iloc[-3])
 
         zone = self.identify_entry_zone(close)
         return {
@@ -126,7 +127,7 @@ class PriceActionAnalyzer:
             "market_structure": structure,
             "support_resistance": levels,
             "breakout": breakout,
-            "pullback": pullback,
+            "pullback": recent_dip,
             "volume_profile": {
                 "current": volume_now,
                 "average_20": volume_avg,
