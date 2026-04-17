@@ -18,11 +18,9 @@ class EcosystemCompatibilityTests(unittest.TestCase):
             "bots/bot_subscription/payment_flow.py",
             "bots/bot_subscription/keyboard.py",
             "bots/bot_subscription/storage.py",
-            "bots/bot_admin/main.py",
-            "bots/bot_admin/handlers.py",
-            "bots/bot_admin/payment_approval.py",
-            "bots/bot_admin/keyboard.py",
-            "bots/bot_admin/user_management.py",
+            "signal_platform/static/admin_dashboard.html",
+            "signal_platform/static/admin_style.css",
+            "signal_platform/static/admin_script.js",
             "dashboard/backend/api.py",
             "dashboard/backend/models.py",
             "dashboard/backend/services.py",
@@ -46,7 +44,6 @@ class EcosystemCompatibilityTests(unittest.TestCase):
             self.assertTrue((repo_root / relative_path).exists(), relative_path)
 
     def test_bot_handlers_basic_contracts(self):
-        from bots.bot_admin.handlers import handle_admin
         from bots.bot_main.handlers import handle_help, handle_market, handle_start
         from bots.bot_subscription.handlers import handle_plans, handle_start as sub_start
 
@@ -56,8 +53,8 @@ class EcosystemCompatibilityTests(unittest.TestCase):
         self.assertIsInstance(market, dict)
         self.assertIn("assets", market)
         self.assertIn("trend", market)
-        self.assertEqual(len(handle_admin()["keyboard"]), 4)
-        self.assertEqual(len(handle_plans()["keyboard"]), 3)
+        self.assertEqual(len(handle_plans()["keyboard"]), 1)
+        self.assertEqual(len(handle_plans()["keyboard"][0]), 3)
         self.assertIn("Welcome", sub_start()["text"])
 
     def test_dashboard_backend_market_route(self):
@@ -69,6 +66,14 @@ class EcosystemCompatibilityTests(unittest.TestCase):
         payload = response.json()
         self.assertIn("assets", payload)
         self.assertIn("trend", payload)
+
+    def test_admin_website_route_exists(self):
+        from signal_platform.api.app import app
+
+        client = TestClient(app)
+        response = client.get("/admin/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("TBot Admin Dashboard", response.text)
 
 
 if __name__ == "__main__":

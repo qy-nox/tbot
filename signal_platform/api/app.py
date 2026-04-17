@@ -17,11 +17,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
@@ -98,6 +101,17 @@ app.add_middleware(
 )
 app.include_router(dashboard_router)
 app.include_router(dashboard_backend_router)
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+@app.get("/admin/", include_in_schema=False)
+def admin_website():
+    admin_dashboard = _STATIC_DIR / "admin_dashboard.html"
+    if admin_dashboard.exists():
+        return FileResponse(admin_dashboard)
+    raise HTTPException(status_code=404, detail="Admin dashboard not found")
 
 
 # ── Dependencies ────────────────────────────────────────────────────────

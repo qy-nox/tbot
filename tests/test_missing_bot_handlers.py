@@ -17,13 +17,14 @@ class MissingBotHandlersTests(unittest.TestCase):
 
     def test_subscription_modules_contract(self):
         from bots.bot_subscription.keyboard import continue_keyboard, payment_options_keyboard, plans_keyboard
-        from bots.bot_subscription.payment_flow import submit_transaction
+        from bots.bot_subscription.payment_flow import begin_subscription, submit_transaction
         from bots.bot_subscription.storage import get_application
 
         self.assertEqual(plans_keyboard(), [["Free", "Premium", "VIP"]])
         self.assertEqual(continue_keyboard(), [["Continue"]])
         self.assertEqual(payment_options_keyboard(), [["Card", "Crypto"]])
-        self.assertIsNone(get_application(1))
+        begin_subscription(username="u1", user_id=1, telegram_id="1", plan="premium")
+        self.assertIsNotNone(get_application(1))
         self.assertEqual(submit_transaction(1, "tx"), "✅ Payment confirmed")
 
     def test_admin_modules_contract(self):
