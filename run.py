@@ -34,10 +34,16 @@ for file in REQUIRED_FILES:
 
 class BotManager:
     """Manage all tbot processes"""
+    NO_TOKEN_REQUIRED = "__NO_TOKEN_REQUIRED__"
     
     def __init__(self):
         self.processes: List[dict[str, Any]] = []
-        self.max_restarts = max(0, int(os.getenv("BOT_RESTART_LIMIT", "3")))
+        raw_restart_limit = os.getenv("BOT_RESTART_LIMIT", "3")
+        try:
+            self.max_restarts = max(0, int(raw_restart_limit))
+        except ValueError:
+            logger.warning("⚠️ Invalid BOT_RESTART_LIMIT=%r; defaulting to 3", raw_restart_limit)
+            self.max_restarts = 3
         self._env_file_cache: dict[str, str] | None = None
         self.bots = [
             {
@@ -84,7 +90,7 @@ class BotManager:
     def _get_bot_token(self, bot: dict[str, Any]) -> str | None:
         token_keys = bot.get("token_envs")
         if not token_keys:
-            return "managed-by-runner"
+            return self.NO_TOKEN_REQUIRED
 
         env_file_values = self._load_env_file()
         for key in token_keys:
