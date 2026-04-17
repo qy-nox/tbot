@@ -33,6 +33,6 @@ def get_live_market_status() -> dict:
             },
             "trend": "BULLISH" if btc["last"] > btc["open"] else "BEARISH",
         }
-    except Exception as exc:  # noqa: BLE001
+    except (ccxt.BaseError, KeyError, TypeError, ValueError) as exc:
         logger.error("Market data error: %s", exc)
         return {"assets": {}, "trend": "UNKNOWN"}

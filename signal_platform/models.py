@@ -31,6 +31,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
@@ -338,4 +340,10 @@ def get_session() -> Session:
 
 def init_db() -> None:
     """Create all platform tables."""
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    inspector = inspect(engine)
+    columns = {col["name"] for col in inspector.get_columns("signal_records")} if "signal_records" in inspector.get_table_names() else set()
+    if "approved" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE signal_records ADD COLUMN approved BOOLEAN NOT NULL DEFAULT 0"))

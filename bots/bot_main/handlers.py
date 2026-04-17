@@ -30,7 +30,7 @@ def handle_signals(db, *, limit: int = 10) -> str:
     active = (
         db.query(SignalRecord)
         .filter(SignalRecord.outcome == SignalOutcome.PENDING)
-        .filter(SignalRecord.approved.is_(True))
+        .filter(SignalRecord.approved == True)
         .order_by(SignalRecord.timestamp.desc())
         .limit(limit)
         .all()
