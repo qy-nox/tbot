@@ -32,6 +32,11 @@ class TechnicalAnalyzer:
         avg_loss = loss.ewm(alpha=1 / period, min_periods=period).mean()
         rs = avg_gain / avg_loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
+        both_zero = (avg_gain == 0) & (avg_loss == 0)
+        only_loss_zero = (avg_loss == 0) & (avg_gain > 0)
+        only_gain_zero = (avg_gain == 0) & (avg_loss > 0)
+        rsi = rsi.mask(both_zero, 50.0).mask(only_loss_zero, 100.0).mask(only_gain_zero, 0.0)
+        rsi = rsi.clip(lower=0.0, upper=100.0)
         logger.debug("RSI(%d) computed", period)
         return rsi
 
@@ -330,7 +335,7 @@ class TechnicalAnalyzer:
         trend = self.detect_trend(df)
 
         result = {
-            "rsi": rsi.iloc[-1] if not rsi.empty else None,
+            "rsi": float(np.clip(rsi.iloc[-1], 0, 100)) if not rsi.empty and pd.notna(rsi.iloc[-1]) else None,
             "ema_fast": emas["ema_fast"].iloc[-1],
             "ema_medium": emas["ema_medium"].iloc[-1],
             "ema_slow": emas["ema_slow"].iloc[-1],

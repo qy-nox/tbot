@@ -13,6 +13,8 @@ SQLAlchemy>=2.0.23
 # API
 fastapi>=0.115.0
 uvicorn[standard]>=0.27.0
+passlib>=1.7.4
+email-validator>=2.2.0
 
 # ML
 scikit-learn>=1.6.0
@@ -21,3 +23,5 @@ lightgbm>=4.6.0
 # Utils
 python-dotenv>=1.0.1
 requests>=2.31.0
+cryptography>=46.0.5
+redis>=6.4.0

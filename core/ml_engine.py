@@ -8,7 +8,12 @@ indicator features.
 
 import logging
 import os
+import hmac
+import hashlib
+import io
 import pickle
+import time
+from base64 import b64decode, b64encode
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -16,11 +21,32 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from config.settings import BASE_DIR
+from config.settings import BASE_DIR, Settings
+from utils.validators import validate_required_columns
 
 logger = logging.getLogger("trading_bot.ml_engine")
 
 MODEL_CACHE_DIR = BASE_DIR / "model_cache"
+ALLOWED_PICKLE_MODULE_PREFIXES = (
+    "sklearn.",
+    "lightgbm.",
+    "numpy.",
+    "scipy.",
+    "pandas.",
+    "builtins",
+    "collections.",
+    "copyreg",
+    "joblib.",
+)
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module == "builtins":
+            return super().find_class(module, name)
+        if any(module.startswith(prefix) for prefix in ALLOWED_PICKLE_MODULE_PREFIXES):
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f"Forbidden class during unpickle: {module}.{name}")
 
 
 @dataclass
@@ -39,6 +65,7 @@ class MLEngine:
     def __init__(self) -> None:
         self.models: dict = {}
         self._is_trained = False
+        self._last_used_at = time.time()
         MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         self._try_load_cached()
 
@@ -215,6 +242,7 @@ class MLEngine:
 
         if self.models:
             self._is_trained = True
+            self._last_used_at = time.time()
             self._save_cache()
 
         return results
@@ -223,10 +251,12 @@ class MLEngine:
 
     def predict(self, df: pd.DataFrame) -> Optional[MLPrediction]:
         """Run the ensemble and return a voted prediction."""
+        self._unload_if_idle()
         if not self._is_trained or not self.models:
             logger.debug("ML engine not trained – skipping prediction")
             return None
 
+        validate_required_columns(df.columns, ("open", "high", "low", "close", "volume"))
         features = self.build_features(df)
         if features.empty:
             return None
@@ -273,6 +303,7 @@ class MLEngine:
             prediction.confidence * 100,
             prediction.votes,
         )
+        self._last_used_at = time.time()
         return prediction
 
     # ── Model caching ───────────────────────────────────────────────────
@@ -283,7 +314,9 @@ class MLEngine:
             path = MODEL_CACHE_DIR / f"{name}.pkl"
             try:
                 with open(path, "wb") as fh:
-                    pickle.dump(model, fh)
+                    payload = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
+                    signature = self._sign(payload)
+                    pickle.dump({"signature": signature, "payload": b64encode(payload).decode("ascii")}, fh)
                 logger.debug("Cached model %s → %s", name, path)
             except Exception:
                 logger.exception("Failed to cache model %s", name)
@@ -297,13 +330,35 @@ class MLEngine:
             if path.exists():
                 try:
                     with open(path, "rb") as fh:
-                        self.models[name] = pickle.load(fh)
+                        stored = pickle.load(fh)
+                    if not isinstance(stored, dict) or "payload" not in stored or "signature" not in stored:
+                        logger.warning("Skipping unsigned model cache %s", path)
+                        continue
+                    payload = b64decode(stored["payload"])
+                    if not hmac.compare_digest(stored["signature"], self._sign(payload)):
+                        logger.warning("Skipping tampered model cache %s", path)
+                        continue
+                    self.models[name] = _RestrictedUnpickler(io.BytesIO(payload)).load()
                     loaded += 1
                 except Exception:
                     logger.exception("Failed to load cached model %s", name)
         if loaded > 0:
             self._is_trained = True
+            self._last_used_at = time.time()
             logger.info("Loaded %d cached ML models", loaded)
+
+    def _sign(self, payload: bytes) -> str:
+        key = Settings.MODEL_SIGNING_KEY.encode("utf-8")
+        return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+    def _unload_if_idle(self) -> None:
+        if not self.models:
+            return
+        if (time.time() - self._last_used_at) <= Settings.ML_MODEL_MAX_IDLE_SECONDS:
+            return
+        logger.info("Unloading idle ML models from memory")
+        self.models.clear()
+        self._is_trained = False
 
     @property
     def is_ready(self) -> bool:

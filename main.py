@@ -11,9 +11,12 @@ import argparse
 import logging
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 from config.settings import Settings
+from core.exceptions import ValidationError
 from core.data_fetcher import DataFetcher
+from core.security import ensure_valid_pair
 from core.technical_analyzer import TechnicalAnalyzer
 from core.sentiment_analyzer import SentimentAnalyzer
 from core.multi_timeframe import MultiTimeframeAnalyzer
@@ -62,6 +65,11 @@ class TradingBot:
 
     def scan_pair(self, pair: str) -> None:
         """Fetch data, analyse, and emit a signal for *pair*."""
+        try:
+            pair = ensure_valid_pair(pair)
+        except ValidationError:
+            logger.warning("Rejected invalid trading pair: %r", pair)
+            return
         logger.info("Scanning %s …", pair)
 
         # 1. Fetch OHLCV
@@ -87,7 +95,7 @@ class TradingBot:
             if mtf_data:
                 mtf_result = self.mtf.analyse(mtf_data)
         except Exception:
-            logger.debug("Multi-timeframe analysis failed for %s (non-fatal)", pair)
+            logger.warning("Multi-timeframe analysis failed for %s (non-fatal)", pair, exc_info=True)
 
         # 4. Sentiment analysis (best-effort)
         articles = self.data_fetcher.fetch_crypto_news()
@@ -100,10 +108,11 @@ class TradingBot:
             whales = self.onchain.get_whale_transactions(asset_name)
             onchain_sentiment = self.onchain.analyse_whale_sentiment(whales)
         except Exception:
-            logger.debug("On-chain analysis failed for %s (non-fatal)", pair)
+            logger.warning("On-chain analysis failed for %s (non-fatal)", pair, exc_info=True)
 
         # 6. ML prediction (best-effort)
         ml_boost = 0.0
+        prediction = None
         if self.ml_engine and self.ml_engine.is_ready:
             try:
                 prediction = self.ml_engine.predict(df)
@@ -111,7 +120,7 @@ class TradingBot:
                     ml_boost = prediction.confidence * 0.1  # small boost
                     logger.info("ML boost for %s: %+.2f (%s)", pair, ml_boost, prediction.direction)
             except Exception:
-                logger.debug("ML prediction failed for %s (non-fatal)", pair)
+                logger.warning("ML prediction failed for %s (non-fatal)", pair, exc_info=True)
 
         # 7. Strategy evaluation
         signal = self.strategy.evaluate(
@@ -130,11 +139,9 @@ class TradingBot:
             signal.reasons.append(f"MTF aligned ({mtf_result.dominant_trend})")
 
         # Apply ML boost if direction agrees
-        if ml_boost > 0 and self.ml_engine:
-            prediction = self.ml_engine.predict(df)
-            if prediction and prediction.direction == signal.direction:
-                signal.confidence = min(signal.confidence + ml_boost, 1.0)
-                signal.reasons.append("ML ensemble confirms")
+        if ml_boost > 0 and prediction and prediction.direction == signal.direction:
+            signal.confidence = min(signal.confidence + ml_boost, 1.0)
+            signal.reasons.append("ML ensemble confirms")
 
         # 8. Position sizing
         plan = self.sizer.compute(
@@ -255,6 +262,19 @@ class TradingBot:
     def _store_signal(signal) -> None:
         session = get_session()
         try:
+            duplicate_since = datetime.now(timezone.utc) - timedelta(minutes=5)
+            existing = (
+                session.query(SignalModel)
+                .filter(
+                    SignalModel.pair == signal.pair,
+                    SignalModel.direction == signal.direction,
+                    SignalModel.timestamp >= duplicate_since,
+                )
+                .first()
+            )
+            if existing is not None:
+                logger.info("Skipping duplicate signal for %s (%s)", signal.pair, signal.direction)
+                return
             record = SignalModel(
                 pair=signal.pair,
                 direction=signal.direction,

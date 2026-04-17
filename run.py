@@ -11,6 +11,7 @@ import subprocess
 import time
 import signal
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ class BotManager:
     NO_TOKEN_REQUIRED = "__NO_TOKEN_REQUIRED__"
     
     def __init__(self):
+        self._lock = threading.RLock()
         self.processes: list[dict[str, Any]] = []
         raw_restart_limit = os.getenv("BOT_RESTART_LIMIT", "3")
         try:
@@ -120,7 +122,8 @@ class BotManager:
                     continue
 
                 process = self._start_process(bot, i)
-                self.processes.append({"process": process, "bot": bot, "restarts": 0})
+                with self._lock:
+                    self.processes.append({"process": process, "bot": bot, "restarts": 0})
                 
                 # Wait between starting bots
                 if i < len(self.bots):
@@ -154,11 +157,16 @@ class BotManager:
         try:
             while True:
                 # Check if any process died
-                for i, process_info in enumerate(self.processes):
-                    if process_info.get("disabled"):
-                        continue
-                    process = process_info["process"]
-                    if process.poll() is not None:
+                with self._lock:
+                    snapshot = list(self.processes)
+                for process_info in snapshot:
+                    with self._lock:
+                        if process_info.get("disabled"):
+                            continue
+                        process = process_info["process"]
+                        if process.poll() is None:
+                            continue
+
                         bot_name = process_info["bot"]["name"]
                         restarts = process_info["restarts"]
                         logger.warning(f"⚠️  {bot_name} terminated (exit code: {process.returncode})")
@@ -187,7 +195,9 @@ class BotManager:
     
     def cleanup(self):
         """Stop all processes"""
-        for i, process_info in enumerate(self.processes):
+        with self._lock:
+            snapshot = list(self.processes)
+        for i, process_info in enumerate(snapshot):
             process = process_info["process"]
             try:
                 process.terminate()

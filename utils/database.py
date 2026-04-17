@@ -99,7 +99,16 @@ def get_engine():
     """Return (and lazily create) the SQLAlchemy engine."""
     global _engine
     if _engine is None:
-        _engine = create_engine(Settings.DATABASE_URL, echo=False)
+        engine_kwargs = {
+            "echo": False,
+            "pool_pre_ping": True,
+            "pool_size": Settings.DB_POOL_SIZE,
+            "max_overflow": Settings.DB_MAX_OVERFLOW,
+            "isolation_level": "SERIALIZABLE",
+        }
+        if Settings.DATABASE_URL.startswith("sqlite"):
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+        _engine = create_engine(Settings.DATABASE_URL, **engine_kwargs)
     return _engine
 
 

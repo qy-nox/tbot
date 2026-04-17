@@ -42,6 +42,8 @@ class Settings:
 
     # ── Database ───────────────────────────────────────────────────────
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'trading_bot.db'}")
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "5"))
+    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 
     # ── Trading Mode ───────────────────────────────────────────────────
     TRADING_MODE: str = os.getenv("TRADING_MODE", "paper")  # paper | live
@@ -126,6 +128,17 @@ class Settings:
 
     # ── Bot Loop ───────────────────────────────────────────────────────
     SCAN_INTERVAL_SECONDS: int = 300  # 5 minutes
+    EXCHANGE_RETRY_ATTEMPTS: int = int(os.getenv("EXCHANGE_RETRY_ATTEMPTS", "3"))
+    EXCHANGE_RETRY_BACKOFF_SECONDS: float = float(os.getenv("EXCHANGE_RETRY_BACKOFF_SECONDS", "1.0"))
+    OHLCV_CACHE_TTL_SECONDS: int = int(os.getenv("OHLCV_CACHE_TTL_SECONDS", "30"))
+
+    # ── Security ───────────────────────────────────────────────────────
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+    MODEL_SIGNING_KEY: str = os.getenv("MODEL_SIGNING_KEY", ENCRYPTION_KEY or "dev-model-signing-key")
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
+    API_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("API_RATE_LIMIT_PER_MINUTE", "120"))
+    ML_MODEL_MAX_IDLE_SECONDS: int = int(os.getenv("ML_MODEL_MAX_IDLE_SECONDS", "1800"))
+    ADMIN_DASHBOARD_REQUIRE_AUTH: bool = os.getenv("ADMIN_DASHBOARD_REQUIRE_AUTH", "false").lower() == "true"
 
     # ── Logging ────────────────────────────────────────────────────────
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
