@@ -19,8 +19,10 @@ async function refreshAdmin() {
       fetchJSON("/api/admin/users?limit=25", token),
     ]);
 
+    const premiumUsers = Number(dashboard.premium_users || 0);
+    const vipUsers = Number(dashboard.vip_users || 0);
     document.getElementById("totalUsers").textContent = dashboard.total_users;
-    document.getElementById("paidUsers").textContent = `${dashboard.premium_users + dashboard.vip_users}`;
+    document.getElementById("paidUsers").textContent = `${premiumUsers + vipUsers}`;
     document.getElementById("signalsToday").textContent = dashboard.total_signals_today;
     document.getElementById("revenue").textContent = `$${Number(dashboard.total_revenue || 0).toFixed(2)}`;
     document.getElementById("usersBox").textContent = JSON.stringify(users, null, 2);

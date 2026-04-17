@@ -54,6 +54,7 @@ class EcosystemCompatibilityTests(unittest.TestCase):
         self.assertIn("assets", market)
         self.assertIn("trend", market)
         self.assertEqual(len(handle_plans()["keyboard"]), 1)
+        self.assertEqual(len(handle_plans()["keyboard"][0]), 3)
         self.assertIn("Welcome", sub_start()["text"])
 
     def test_dashboard_backend_market_route(self):
