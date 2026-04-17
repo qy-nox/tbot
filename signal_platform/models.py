@@ -133,6 +133,17 @@ class User(Base):
     def __repr__(self) -> str:
         return f"<User {self.username} tier={self.subscription_tier.value}>"
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "is_active": self.is_active,
+            "is_admin": self.is_admin,
+            "subscription_tier": self.subscription_tier.value if self.subscription_tier else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 # ── Subscription Plan ───────────────────────────────────────────────────
 
@@ -205,6 +216,7 @@ class SignalRecord(Base):
     actual_exit_price = Column(Float)
     pnl_percent = Column(Float)
     closed_at = Column(DateTime)
+    approved = Column(Boolean, default=False, nullable=False)
 
     # relationships
     deliveries = relationship("SignalDelivery", back_populates="signal", lazy="dynamic")
@@ -214,6 +226,18 @@ class SignalRecord(Base):
             f"<SignalRecord {self.pair} {self.direction.value} "
             f"grade={self.grade} conf={self.confidence:.0%}>"
         )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "pair": self.pair,
+            "direction": self.direction.value if self.direction else None,
+            "entry_price": self.entry_price,
+            "confidence": self.confidence,
+            "outcome": self.outcome.value if self.outcome else None,
+            "approved": self.approved,
+        }
 
 
 # ── Signal Delivery ─────────────────────────────────────────────────────

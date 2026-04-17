@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from signal_platform.models import SignalOutcome
+from signal_platform.models import SignalOutcome, SignalRecord, get_session
 from signal_platform.services.performance_service import PerformanceService
-from signal_platform.services.signal_service import SignalService
 
 from bots.bot_main.keyboard import main_menu_keyboard
 from bots.bot_main.market_data import get_live_market_status
@@ -27,8 +26,13 @@ def handle_market() -> dict[str, object]:
 
 
 def handle_signals(db, *, limit: int = 20) -> str:
-    signals = SignalService.list_recent(db, limit=limit)
-    active = [s for s in signals if s.outcome == SignalOutcome.PENDING]
+    active = (
+        db.query(SignalRecord)
+        .filter(SignalRecord.outcome == SignalOutcome.PENDING)
+        .order_by(SignalRecord.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
     return format_signal_list(active)
 
 

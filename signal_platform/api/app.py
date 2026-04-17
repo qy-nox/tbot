@@ -64,6 +64,7 @@ from signal_platform.services.performance_service import PerformanceService
 from signal_platform.services.signal_service import SignalService
 from signal_platform.services.subscription_service import SubscriptionService
 from signal_platform.services.user_service import UserService
+from . import routes_admin
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ app.add_middleware(
 )
 app.include_router(dashboard_router)
 app.include_router(dashboard_backend_router)
+app.include_router(routes_admin.router)
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if _STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -108,6 +110,9 @@ if _STATIC_DIR.exists():
 
 @app.get("/admin/", include_in_schema=False)
 def admin_website():
+    admin_page = _STATIC_DIR / "admin.html"
+    if admin_page.exists():
+        return FileResponse(admin_page)
     admin_dashboard = _STATIC_DIR / "admin_dashboard.html"
     if admin_dashboard.exists():
         return FileResponse(admin_dashboard)

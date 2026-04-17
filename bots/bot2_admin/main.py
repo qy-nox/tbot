@@ -1,10 +1,8 @@
-"""Compatibility entrypoint for the admin Telegram bot."""
-
-from bots.bot_admin import main as admin_main
+"""Deprecated compatibility entrypoint for removed admin Telegram bot."""
 
 
 def main() -> None:
-    admin_main.main()
+    raise RuntimeError("Admin Telegram bot was removed. Use the admin website at /admin/.")
 
 
 if __name__ == "__main__":

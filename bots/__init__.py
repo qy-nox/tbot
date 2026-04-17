@@ -1,1 +1,1 @@
-"""Telegram bot packages for subscription, admin, and distribution workflows."""
+"""Telegram bot packages for main and subscription workflows."""

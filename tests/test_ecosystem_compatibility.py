@@ -18,6 +18,7 @@ class EcosystemCompatibilityTests(unittest.TestCase):
             "bots/bot_subscription/payment_flow.py",
             "bots/bot_subscription/keyboard.py",
             "bots/bot_subscription/storage.py",
+            "signal_platform/static/admin.html",
             "signal_platform/static/admin_dashboard.html",
             "signal_platform/static/admin_style.css",
             "signal_platform/static/admin_script.js",
