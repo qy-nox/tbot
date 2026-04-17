@@ -6,7 +6,11 @@ All settings, API keys, trading parameters, and indicator configurations.
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional for bare runtime/tests
+    def load_dotenv(*_args, **_kwargs):  # type: ignore[no-redef]
+        return False
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,6 +28,8 @@ class Settings:
 
     # ── Finnhub API Key (news) ─────────────────────────────────────────
     FINNHUB_API_KEY: str = os.getenv("FINNHUB_API_KEY", "")
+    ALPHA_VANTAGE_API_KEY: str = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+    NEWSAPI_KEY: str = os.getenv("NEWSAPI_KEY", "")
 
     # ── Telegram ───────────────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -39,6 +45,11 @@ class Settings:
         or os.getenv("TELEGRAM_TOKEN_BOT2", "")
     )
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
 
     # ── Database ───────────────────────────────────────────────────────
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'trading_bot.db'}")
@@ -54,12 +65,13 @@ class Settings:
         "ETH/USDT",
         "BNB/USDT",
         "SOL/USDT",
-        "XRP/USDT",
         "ADA/USDT",
+        "XRP/USDT",
     ]
 
     # ── Timeframes ─────────────────────────────────────────────────────
     TIMEFRAME: str = "1h"
+    TIMEFRAMES: list = ["5m", "15m", "1h", "4h", "1d"]
     CANDLE_LIMIT: int = 200
 
     # ── Multi-Timeframe Analysis ──────────────────────────────────────
@@ -68,6 +80,9 @@ class Settings:
 
     # ── Binary Trading ────────────────────────────────────────────────
     BINARY_ENABLED: bool = True
+    IQ_OPTION_EMAIL: str = os.getenv("IQ_OPTION_EMAIL", "")
+    IQ_OPTION_PASSWORD: str = os.getenv("IQ_OPTION_PASSWORD", "")
+    POCKET_OPTION_TOKEN: str = os.getenv("POCKET_OPTION_TOKEN", "")
     BINARY_PAIRS: list = [
         "BTC/USDT",
         "ETH/USDT",
@@ -81,8 +96,14 @@ class Settings:
 
     # ── ML Engine ─────────────────────────────────────────────────────
     ML_ENABLED: bool = True
+    ML_MODEL_PATH: str = os.getenv("ML_MODEL_PATH", "models/")
+    LSTM_ENABLED: bool = os.getenv("LSTM_ENABLED", "true").lower() == "true"
+    XGBOOST_ENABLED: bool = os.getenv("XGBOOST_ENABLED", "true").lower() == "true"
     ML_TRAINING_CANDLES: int = 500
     ML_PREDICTION_HORIZON: int = 5
+    SENTIMENT_ENABLED: bool = os.getenv("SENTIMENT_ENABLED", "true").lower() == "true"
+    VADER_ENABLED: bool = os.getenv("VADER_ENABLED", "true").lower() == "true"
+    TEXTBLOB_ENABLED: bool = os.getenv("TEXTBLOB_ENABLED", "true").lower() == "true"
 
     # ── Technical Indicator Settings ───────────────────────────────────
     INDICATORS = {
@@ -93,12 +114,19 @@ class Settings:
         "atr": {"period": 14},
         "adx": {"period": 14, "strong_trend": 25},
     }
+    RSI_PERIOD: int = int(os.getenv("RSI_PERIOD", "14"))
+    RSI_OVERSOLD: int = int(os.getenv("RSI_OVERSOLD", "30"))
+    RSI_OVERBOUGHT: int = int(os.getenv("RSI_OVERBOUGHT", "70"))
+    EMA_PERIODS: list = [20, 50, 200]
+    ATR_PERIOD: int = int(os.getenv("ATR_PERIOD", "14"))
 
     # ── Signal Thresholds ──────────────────────────────────────────────
     MIN_SIGNAL_CONFIDENCE: float = 0.6  # 60% minimum confidence
     MIN_INDICATORS_AGREE: int = 2  # At least 2 out of 3 must agree
 
     # ── Risk Management ────────────────────────────────────────────────
+    MAX_TRADES_PER_DAY: int = int(os.getenv("MAX_TRADES_PER_DAY", "5"))
+    MAX_POSITIONS: int = int(os.getenv("MAX_POSITIONS", "3"))
     RISK_PER_TRADE: float = 0.02  # 2% of portfolio per trade
     MAX_OPEN_TRADES: int = 5
     MAX_DRAWDOWN: float = 0.10  # 10% max drawdown
@@ -121,6 +149,9 @@ class Settings:
     }
 
     # ── Backtesting ────────────────────────────────────────────────────
+    BACKTEST_ENABLED: bool = os.getenv("BACKTEST_ENABLED", "true").lower() == "true"
+    BACKTEST_DAYS: int = int(os.getenv("BACKTEST_DAYS", "252"))
+    MIN_CONFIRMATIONS: int = int(os.getenv("MIN_CONFIRMATIONS", "3"))
     BACKTEST_START_DATE: str = "2024-01-01"
     BACKTEST_END_DATE: str = "2024-12-31"
     BACKTEST_INITIAL_CAPITAL: float = 10000.0
@@ -132,6 +163,8 @@ class Settings:
     EXCHANGE_RETRY_BACKOFF_SECONDS: float = float(os.getenv("EXCHANGE_RETRY_BACKOFF_SECONDS", "1.0"))
     OHLCV_CACHE_TTL_SECONDS: int = int(os.getenv("OHLCV_CACHE_TTL_SECONDS", "30"))
     OHLCV_CACHE_MAX_ENTRIES: int = int(os.getenv("OHLCV_CACHE_MAX_ENTRIES", "256"))
+    CALENDAR_ENABLED: bool = os.getenv("CALENDAR_ENABLED", "true").lower() == "true"
+    HIGH_IMPACT_SKIP_MINUTES: int = int(os.getenv("HIGH_IMPACT_SKIP_MINUTES", "30"))
 
     # ── Security ───────────────────────────────────────────────────────
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
