@@ -105,6 +105,7 @@ class BotEntrypointTests(unittest.TestCase):
 
         manager = BotManager()
         main_bot = next(bot for bot in manager.bots if bot["name"] == "📊 Bot 1: Main Signal Bot")
+        self.assertFalse(any("Admin Bot" in bot["name"] for bot in manager.bots))
 
         with patch.object(manager, "_load_env_file", return_value={}):
             with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_MAIN": "", "TELEGRAM_BOT_TOKEN": ""}, clear=False):

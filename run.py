@@ -1,6 +1,6 @@
 """
 🚀 tbot - Complete Trading Signal Ecosystem
-Run ALL 3 bots + API + Dashboard with one command!
+Run API + Dashboard + Telegram bots with one command!
 
 Usage: python run.py
 """
@@ -62,12 +62,6 @@ class BotManager:
                 "cmd": [sys.executable, "-m", "bots.bot_subscription.main"],
                 "description": "Payment & subscription management",
                 "token_envs": ("TELEGRAM_BOT_TOKEN_SUB", "BOT1_SUBSCRIPTION_TOKEN"),
-            },
-            {
-                "name": "👨‍💼 Bot 3: Admin Bot",
-                "cmd": [sys.executable, "-m", "bots.bot_admin.main"],
-                "description": "Admin controls & management",
-                "token_envs": ("TELEGRAM_BOT_TOKEN_ADMIN", "BOT2_ADMIN_TOKEN"),
             },
         ]
 
@@ -147,7 +141,8 @@ class BotManager:
         logger.info("\n🤖 TELEGRAM BOTS:")
         logger.info("  • Bot 1: @YourMainBotName (live signals)")
         logger.info("  • Bot 2: @YourSubBotName (subscriptions)")
-        logger.info("  • Bot 3: @YourAdminBotName (admin)")
+        logger.info("\n🛠️ ADMIN:")
+        logger.info("  • Admin Website: http://localhost:8000/admin/")
         logger.info("\n💡 Press Ctrl+C to stop all services")
         logger.info("=" * 70 + "\n")
         
