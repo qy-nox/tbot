@@ -12,12 +12,11 @@ class BotEntrypointTests(unittest.TestCase):
             bot1_main.main()
             canonical_main.assert_called_once()
 
-    def test_bot2_admin_entrypoint_delegates_to_admin_bot(self):
+    def test_bot2_admin_entrypoint_is_removed(self):
         from bots.bot2_admin import main as bot2_main
 
-        with patch("bots.bot2_admin.main.admin_main.main") as canonical_main:
+        with self.assertRaises(RuntimeError):
             bot2_main.main()
-            canonical_main.assert_called_once()
 
     def test_settings_bot_token_aliases(self):
         import config.settings as settings_module
@@ -73,26 +72,10 @@ class BotEntrypointTests(unittest.TestCase):
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_SUB": "12345:abcde"}, clear=False):
             self.assertEqual(_require_token(), "12345:abcde")
 
-    def test_admin_bot_token_validation(self):
-        from bots.bot_admin.main import _require_token
-
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_ADMIN": ""}, clear=False):
-            self.assertIsNone(_require_token())
-
-        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_ADMIN": "12345:abcde"}, clear=False):
-            self.assertEqual(_require_token(), "12345:abcde")
-
-    def test_admin_ids_parser(self):
-        from bots.bot_admin.main import _admin_ids
-
-        with patch.dict(os.environ, {"ADMIN_USER_IDS": "1, 2, x,3", "ADMIN_IDS": ""}, clear=False):
-            self.assertEqual(_admin_ids(), {1, 2, 3})
-
     def test_bots_raise_clear_error_when_telegram_dependency_missing(self):
         modules = [
             importlib.import_module("bots.bot_main.main"),
             importlib.import_module("bots.bot_subscription.main"),
-            importlib.import_module("bots.bot_admin.main"),
         ]
 
         for module in modules:

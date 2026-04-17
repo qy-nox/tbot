@@ -31,6 +31,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
@@ -133,6 +135,17 @@ class User(Base):
     def __repr__(self) -> str:
         return f"<User {self.username} tier={self.subscription_tier.value}>"
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "is_active": self.is_active,
+            "is_admin": self.is_admin,
+            "subscription_tier": self.subscription_tier.value if self.subscription_tier else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 # ── Subscription Plan ───────────────────────────────────────────────────
 
@@ -205,6 +218,8 @@ class SignalRecord(Base):
     actual_exit_price = Column(Float)
     pnl_percent = Column(Float)
     closed_at = Column(DateTime)
+    # Manual moderation flag: unapproved signals are hidden from user-facing listings.
+    approved = Column(Boolean, default=False, nullable=False)
 
     # relationships
     deliveries = relationship("SignalDelivery", back_populates="signal", lazy="dynamic")
@@ -214,6 +229,18 @@ class SignalRecord(Base):
             f"<SignalRecord {self.pair} {self.direction.value} "
             f"grade={self.grade} conf={self.confidence:.0%}>"
         )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "pair": self.pair,
+            "direction": self.direction.value if self.direction else None,
+            "entry_price": self.entry_price,
+            "confidence": self.confidence,
+            "outcome": self.outcome.value if self.outcome else None,
+            "approved": self.approved,
+        }
 
 
 # ── Signal Delivery ─────────────────────────────────────────────────────
@@ -313,4 +340,10 @@ def get_session() -> Session:
 
 def init_db() -> None:
     """Create all platform tables."""
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    inspector = inspect(engine)
+    columns = {col["name"] for col in inspector.get_columns("signal_records")} if "signal_records" in inspector.get_table_names() else set()
+    if "approved" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE signal_records ADD COLUMN approved BOOLEAN NOT NULL DEFAULT 0"))

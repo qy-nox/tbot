@@ -2,11 +2,10 @@
 
 This repository includes:
 
-- `run.py` process manager that starts API/dashboard + all 3 Telegram bots
+- `run.py` process manager that starts API/dashboard + 2 Telegram bots
 - completed async bot entrypoints:
   - `bots/bot_main/main.py`
   - `bots/bot_subscription/main.py`
-  - `bots/bot_admin/main.py`
 - package markers (`__init__.py`) for bot packages
 - token validation and structured startup errors
 - combined database bootstrap via `utils/database_v2.py`
@@ -28,4 +27,3 @@ This repository includes:
 
 - Dashboard: `http://localhost:8000/dashboard/`
 - API docs: `http://localhost:8000/docs`
-

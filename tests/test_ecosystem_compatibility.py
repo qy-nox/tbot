@@ -18,6 +18,7 @@ class EcosystemCompatibilityTests(unittest.TestCase):
             "bots/bot_subscription/payment_flow.py",
             "bots/bot_subscription/keyboard.py",
             "bots/bot_subscription/storage.py",
+            "signal_platform/static/admin.html",
             "signal_platform/static/admin_dashboard.html",
             "signal_platform/static/admin_style.css",
             "signal_platform/static/admin_script.js",
@@ -73,7 +74,7 @@ class EcosystemCompatibilityTests(unittest.TestCase):
         client = TestClient(app)
         response = client.get("/admin/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("TBot Admin Dashboard", response.text)
+        self.assertIn("TBOT Admin Dashboard", response.text)
 
 
 if __name__ == "__main__":

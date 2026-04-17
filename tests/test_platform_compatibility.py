@@ -24,7 +24,6 @@ class PlatformCompatibilityTests(unittest.TestCase):
         from bots.bot1_subscription.utils import format_plan_catalog, format_welcome_message
         from bots.bot2_admin.database import open_session as admin_open_session
         from bots.bot2_admin.keyboard import admin_keyboard
-        from bots.bot3_distribution.channel_manager import broadcast_channels_from_env
         from config.bot_config import BotConfig, bot_config
         from database.migrations import run_migrations
         from signal_platform import constants, exceptions, utils
@@ -35,7 +34,6 @@ class PlatformCompatibilityTests(unittest.TestCase):
         self.assertIn("premium", format_plan_catalog())
         self.assertTrue(callable(admin_open_session))
         self.assertEqual(len(admin_keyboard()), 4)
-        self.assertIsInstance(broadcast_channels_from_env(), list)
         self.assertIsInstance(bot_config, BotConfig)
         self.assertTrue(callable(run_migrations))
         self.assertEqual(constants.DEFAULT_TIMEZONE, "UTC")
