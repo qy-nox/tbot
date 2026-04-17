@@ -14,7 +14,8 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# set API keys, bot tokens, DB URL and JWT secret
+# set API keys, DB URL and JWT secret
+# bot tokens are optional; bots without valid tokens are skipped by run.py
 ```
 
 ## 3) Initialize DB
@@ -34,6 +35,9 @@ python main.py
 
 # both together
 python main.py --both
+
+# ecosystem manager (API + available bots)
+python run.py
 ```
 
 ## 5) Use dashboard/docs

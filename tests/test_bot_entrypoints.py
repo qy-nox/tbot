@@ -59,8 +59,7 @@ class BotEntrypointTests(unittest.TestCase):
         from bots.bot_main.main import _require_token
 
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_MAIN": "bad-token"}, clear=False):
-            with self.assertRaises(RuntimeError):
-                _require_token()
+            self.assertIsNone(_require_token())
 
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_MAIN": "12345:abcde"}, clear=False):
             self.assertEqual(_require_token(), "12345:abcde")
@@ -69,10 +68,18 @@ class BotEntrypointTests(unittest.TestCase):
         from bots.bot_subscription.main import _require_token
 
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_SUB": ""}, clear=False):
-            with self.assertRaises(RuntimeError):
-                _require_token()
+            self.assertIsNone(_require_token())
 
         with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_SUB": "12345:abcde"}, clear=False):
+            self.assertEqual(_require_token(), "12345:abcde")
+
+    def test_admin_bot_token_validation(self):
+        from bots.bot_admin.main import _require_token
+
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_ADMIN": ""}, clear=False):
+            self.assertIsNone(_require_token())
+
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_ADMIN": "12345:abcde"}, clear=False):
             self.assertEqual(_require_token(), "12345:abcde")
 
     def test_admin_ids_parser(self):
@@ -92,6 +99,20 @@ class BotEntrypointTests(unittest.TestCase):
             with patch.object(module, "_TELEGRAM_IMPORT_ERROR", ModuleNotFoundError("telegram")):
                 with self.assertRaises(RuntimeError):
                     module._ensure_telegram_dependency()
+
+    def test_run_manager_skips_bots_without_token(self):
+        from run import BotManager
+
+        manager = BotManager()
+        main_bot = next(bot for bot in manager.bots if bot["name"] == "📊 Bot 1: Main Signal Bot")
+
+        with patch.object(manager, "_load_env_file", return_value={}):
+            with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_MAIN": "", "TELEGRAM_BOT_TOKEN": ""}, clear=False):
+                self.assertIsNone(manager._get_bot_token(main_bot))
+
+        with patch.object(manager, "_load_env_file", return_value={}):
+            with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN_MAIN": "12345:abcde"}, clear=False):
+                self.assertEqual(manager._get_bot_token(main_bot), "12345:abcde")
 
 
 if __name__ == "__main__":
