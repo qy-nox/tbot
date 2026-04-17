@@ -1,5 +1,7 @@
 """Admin website API routes."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session
 from signal_platform.models import SignalRecord, User, get_session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def get_db_session():
@@ -42,5 +45,6 @@ def approve_signal(signal_id: int, db: Session = Depends(get_db_session)):
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to approve signal: {exc}") from exc
+        logger.exception("Failed to approve signal %s", signal_id)
+        raise HTTPException(status_code=500, detail="Failed to approve signal") from exc
     return {"status": "approved"}
