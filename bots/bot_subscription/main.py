@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 try:
@@ -26,10 +27,11 @@ def _ensure_telegram_dependency() -> None:
         ) from _TELEGRAM_IMPORT_ERROR
 
 
-def _require_token() -> str:
+def _require_token() -> str | None:
     token = os.getenv("TELEGRAM_BOT_TOKEN_SUB") or os.getenv("BOT1_SUBSCRIPTION_TOKEN")
     if not token or ":" not in token:
-        raise RuntimeError("Missing or invalid TELEGRAM_BOT_TOKEN_SUB")
+        logger.warning("⚠️ TELEGRAM_BOT_TOKEN_SUB not configured - bot disabled")
+        return None
     return token
 
 
@@ -114,7 +116,17 @@ class SubscriptionBot:
 def main() -> None:
     _ensure_telegram_dependency()
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-    app = Application.builder().token(_require_token()).build()
+    token = _require_token()
+    if not token:
+        logger.warning("Bot cannot start without token - keeping process alive")
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            logger.info("Bot process terminated")
+        return
+
+    app = Application.builder().token(token).build()
     bot = SubscriptionBot()
 
     app.add_handler(CommandHandler("start", bot.start_cmd))

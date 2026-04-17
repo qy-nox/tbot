@@ -12,7 +12,7 @@ import time
 import signal
 import logging
 from pathlib import Path
-from typing import List
+from typing import Any
 
 # Configure logging
 logging.basicConfig(
@@ -34,9 +34,17 @@ for file in REQUIRED_FILES:
 
 class BotManager:
     """Manage all tbot processes"""
+    NO_TOKEN_REQUIRED = "__NO_TOKEN_REQUIRED__"
     
     def __init__(self):
-        self.processes: List[subprocess.Popen] = []
+        self.processes: list[dict[str, Any]] = []
+        raw_restart_limit = os.getenv("BOT_RESTART_LIMIT", "3")
+        try:
+            self.max_restarts = max(0, int(raw_restart_limit))
+        except ValueError:
+            logger.warning("⚠️ Invalid BOT_RESTART_LIMIT=%r; defaulting to 3", raw_restart_limit)
+            self.max_restarts = 3
+        self._env_file_cache: dict[str, str] | None = None
         self.bots = [
             {
                 "name": "🎯 API Server + Dashboard",
@@ -47,18 +55,62 @@ class BotManager:
                 "name": "📊 Bot 1: Main Signal Bot",
                 "cmd": [sys.executable, "-m", "bots.bot_main.main"],
                 "description": "Live market data & signals",
+                "token_envs": ("TELEGRAM_BOT_TOKEN_MAIN", "TELEGRAM_BOT_TOKEN"),
             },
             {
                 "name": "💳 Bot 2: Subscription Bot",
                 "cmd": [sys.executable, "-m", "bots.bot_subscription.main"],
                 "description": "Payment & subscription management",
+                "token_envs": ("TELEGRAM_BOT_TOKEN_SUB", "BOT1_SUBSCRIPTION_TOKEN"),
             },
             {
                 "name": "👨‍💼 Bot 3: Admin Bot",
                 "cmd": [sys.executable, "-m", "bots.bot_admin.main"],
                 "description": "Admin controls & management",
+                "token_envs": ("TELEGRAM_BOT_TOKEN_ADMIN", "BOT2_ADMIN_TOKEN"),
             },
         ]
+
+    def _load_env_file(self) -> dict[str, str]:
+        if self._env_file_cache is not None:
+            return self._env_file_cache
+
+        values: dict[str, str] = {}
+        env_path = PROJECT_ROOT / ".env"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                key, value = stripped.split("=", 1)
+                values[key.strip()] = value.strip().strip("'\"")
+        self._env_file_cache = values
+        return values
+
+    def _get_bot_token(self, bot: dict[str, Any]) -> str | None:
+        token_keys = bot.get("token_envs")
+        if not token_keys:
+            return self.NO_TOKEN_REQUIRED
+
+        env_file_values = self._load_env_file()
+        for key in token_keys:
+            token = (os.getenv(key) or env_file_values.get(key) or "").strip()
+            if token and ":" in token:
+                return token
+        return None
+
+    def _start_process(self, bot: dict[str, Any], index: int) -> subprocess.Popen:
+        logger.info(f"\n[{index}/{len(self.bots)}] Starting: {bot['name']}")
+        logger.info(f"    📝 {bot['description']}")
+        logger.info(f"    🔧 Command: {' '.join(bot['cmd'])}")
+
+        process = subprocess.Popen(
+            bot['cmd'],
+            cwd=PROJECT_ROOT,
+            start_new_session=True,
+        )
+        logger.info(f"    ✅ Started (PID: {process.pid})")
+        return process
     
     def start_all(self):
         """Start all bots"""
@@ -68,18 +120,13 @@ class BotManager:
         
         for i, bot in enumerate(self.bots, 1):
             try:
-                logger.info(f"\n[{i}/{len(self.bots)}] Starting: {bot['name']}")
-                logger.info(f"    📝 {bot['description']}")
-                logger.info(f"    🔧 Command: {' '.join(bot['cmd'])}")
-                
-                process = subprocess.Popen(
-                    bot['cmd'],
-                    cwd=PROJECT_ROOT,
-                    start_new_session=True,
-                )
-                
-                self.processes.append(process)
-                logger.info(f"    ✅ Started (PID: {process.pid})")
+                token = self._get_bot_token(bot)
+                if token is None:
+                    logger.warning(f"    ⏭️  Skipping {bot['name']} - no token configured")
+                    continue
+
+                process = self._start_process(bot, i)
+                self.processes.append({"process": process, "bot": bot, "restarts": 0})
                 
                 # Wait between starting bots
                 if i < len(self.bots):
@@ -112,9 +159,30 @@ class BotManager:
         try:
             while True:
                 # Check if any process died
-                for i, process in enumerate(self.processes):
+                for i, process_info in enumerate(self.processes):
+                    if process_info.get("disabled"):
+                        continue
+                    process = process_info["process"]
                     if process.poll() is not None:
-                        logger.warning(f"⚠️  Bot {i+1} terminated (exit code: {process.returncode})")
+                        bot_name = process_info["bot"]["name"]
+                        restarts = process_info["restarts"]
+                        logger.warning(f"⚠️  {bot_name} terminated (exit code: {process.returncode})")
+
+                        if restarts >= self.max_restarts:
+                            logger.error(f"❌ {bot_name} reached restart limit ({self.max_restarts})")
+                            process_info["disabled"] = True
+                            continue
+
+                        logger.info(f"🔁 Restarting {bot_name} (attempt {restarts + 1}/{self.max_restarts})")
+                        time.sleep(2)
+                        restarted = subprocess.Popen(
+                            process_info["bot"]["cmd"],
+                            cwd=PROJECT_ROOT,
+                            start_new_session=True,
+                        )
+                        process_info["process"] = restarted
+                        process_info["restarts"] = restarts + 1
+                        logger.info(f"    ✅ Restarted {bot_name} (PID: {restarted.pid})")
                 
                 time.sleep(1)
                 
@@ -124,7 +192,8 @@ class BotManager:
     
     def cleanup(self):
         """Stop all processes"""
-        for i, process in enumerate(self.processes):
+        for i, process_info in enumerate(self.processes):
+            process = process_info["process"]
             try:
                 process.terminate()
                 process.wait(timeout=5)

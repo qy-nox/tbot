@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 try:
@@ -26,10 +27,11 @@ def _ensure_telegram_dependency() -> None:
         ) from _TELEGRAM_IMPORT_ERROR
 
 
-def _require_token() -> str:
+def _require_token() -> str | None:
     token = os.getenv("TELEGRAM_BOT_TOKEN_ADMIN") or os.getenv("BOT2_ADMIN_TOKEN")
     if not token or ":" not in token:
-        raise RuntimeError("Missing or invalid TELEGRAM_BOT_TOKEN_ADMIN")
+        logger.warning("⚠️ TELEGRAM_BOT_TOKEN_ADMIN not configured - bot disabled")
+        return None
     return token
 
 
@@ -144,7 +146,17 @@ class AdminBot:
 def main() -> None:
     _ensure_telegram_dependency()
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-    app = Application.builder().token(_require_token()).build()
+    token = _require_token()
+    if not token:
+        logger.warning("Bot cannot start without token - keeping process alive")
+        try:
+            while True:
+                time.sleep(60)
+        except KeyboardInterrupt:
+            logger.info("Bot process terminated")
+        return
+
+    app = Application.builder().token(token).build()
     bot = AdminBot()
 
     app.add_handler(CommandHandler("admin", bot.admin_cmd))
