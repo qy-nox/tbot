@@ -46,13 +46,13 @@ class ConfigAndCompatibilityTests(unittest.TestCase):
             self.assertEqual(reloaded.Settings.RSI_OVERSOLD, 28)
             self.assertEqual(reloaded.Settings.RSI_OVERBOUGHT, 72)
 
-        importlib.reload(settings_module)
-
     def test_backtester_pro_compatibility_import(self):
         from core.backtester_pro import ProfessionalBacktester
 
         metrics = ProfessionalBacktester().summarize([1.0, -0.5, 2.0])
         self.assertEqual(metrics.total_trades, 3)
+        self.assertGreater(metrics.win_rate, 0)
+        self.assertGreater(metrics.net_profit, 0)
 
     def test_binary_handler_configuration(self):
         with patch.dict(
@@ -67,10 +67,32 @@ class ConfigAndCompatibilityTests(unittest.TestCase):
             import config.settings as settings_module
 
             importlib.reload(settings_module)
-            from core.binary_handler import BinaryHandler
+            import core.binary_handler as binary_handler_module
+
+            binary_handler_module = importlib.reload(binary_handler_module)
+            BinaryHandler = binary_handler_module.BinaryHandler
 
             self.assertTrue(BinaryHandler().configured())
+
+    def test_binary_handler_not_configured(self):
+        with patch.dict(
+            os.environ,
+            {
+                "IQ_OPTION_EMAIL": "",
+                "IQ_OPTION_PASSWORD": "",
+                "POCKET_OPTION_TOKEN": "",
+            },
+            clear=False,
+        ):
+            import config.settings as settings_module
+
             importlib.reload(settings_module)
+            import core.binary_handler as binary_handler_module
+
+            binary_handler_module = importlib.reload(binary_handler_module)
+            BinaryHandler = binary_handler_module.BinaryHandler
+
+            self.assertFalse(BinaryHandler().configured())
 
 
 if __name__ == "__main__":

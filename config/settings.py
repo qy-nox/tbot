@@ -4,16 +4,24 @@ All settings, API keys, trading parameters, and indicator configurations.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - optional for bare runtime/tests
-    def load_dotenv(*_args, **_kwargs):  # type: ignore[no-redef]
+    def _no_op_load_dotenv(*args, **kwargs):
+        warnings.warn(
+            "python-dotenv is not installed; .env file loading is disabled.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return False
 
+    _load_dotenv = _no_op_load_dotenv
+
 # Load environment variables from .env file
-load_dotenv()
+_load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -65,8 +73,8 @@ class Settings:
         "ETH/USDT",
         "BNB/USDT",
         "SOL/USDT",
-        "ADA/USDT",
         "XRP/USDT",
+        "ADA/USDT",
     ]
 
     # ── Timeframes ─────────────────────────────────────────────────────

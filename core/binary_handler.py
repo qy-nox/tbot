@@ -16,7 +16,7 @@ class BinaryCredentials:
 
 
 class BinaryHandler:
-    """Small façade that centralises binary credentials and signal generation."""
+    """Small façade that centralizes binary credentials and signal generation."""
 
     def __init__(self) -> None:
         self.credentials = BinaryCredentials(
@@ -32,5 +32,10 @@ class BinaryHandler:
             or self.credentials.pocket_option_token
         )
 
-    def generate_signal(self, **kwargs):
+    def generate_signal(self, **kwargs) -> dict | None:
+        """Proxy signal generation to :class:`trading.binary_trader.BinaryTrader`.
+
+        Expected keyword arguments mirror ``BinaryTrader.generate_signal``:
+        pair, timeframe, rsi, ema20, ema50, close, bb_upper, bb_lower.
+        """
         return self._trader.generate_signal(**kwargs)
