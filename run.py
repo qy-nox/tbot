@@ -12,7 +12,7 @@ import time
 import signal
 import logging
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 # Configure logging
 logging.basicConfig(
@@ -37,7 +37,7 @@ class BotManager:
     NO_TOKEN_REQUIRED = "__NO_TOKEN_REQUIRED__"
     
     def __init__(self):
-        self.processes: List[dict[str, Any]] = []
+        self.processes: list[dict[str, Any]] = []
         raw_restart_limit = os.getenv("BOT_RESTART_LIMIT", "3")
         try:
             self.max_restarts = max(0, int(raw_restart_limit))
