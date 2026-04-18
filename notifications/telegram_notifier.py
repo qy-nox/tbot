@@ -23,6 +23,7 @@ class TelegramNotifier:
     """Send messages to a Telegram chat via the Bot API."""
 
     BASE_URL = "https://api.telegram.org/bot{token}"
+    ERROR_BODY_PREVIEW_LENGTH = 300
 
     def __init__(
         self,
@@ -57,8 +58,16 @@ class TelegramNotifier:
 
         channels = list(Settings.TELEGRAM_BROADCAST_CHANNELS)
         for channel in channels:
-            if channel not in selected:
-                selected.append(channel)
+            value = str(channel).strip()
+            if not is_valid_telegram_chat_id(value):
+                logger.error(
+                    "Invalid TELEGRAM_BROADCAST_CHANNELS/BROADCAST_TELEGRAM_CHANNELS entry=%r. "
+                    "Expected numeric chat id like 123456789 or -1001234567890.",
+                    value,
+                )
+                continue
+            if value not in selected:
+                selected.append(value)
 
         return selected
 
@@ -79,20 +88,69 @@ class TelegramNotifier:
                     payload = {
                         "chat_id": chat_id,
                         "text": text,
-                        "parse_mode": parse_mode,
                     }
+                    if parse_mode:
+                        payload["parse_mode"] = parse_mode
                     resp = requests.post(url, json=payload, timeout=10)
                     try:
                         resp.raise_for_status()
+                        try:
+                            data = resp.json() if resp.text else None
+                        except ValueError:
+                            raise requests.HTTPError("Telegram API returned non-JSON response body", response=resp)
+                        if data is None:
+                            raise requests.HTTPError(
+                                "Telegram API returned empty response body; expected JSON with ok field",
+                                response=resp,
+                            )
+                        if isinstance(data, dict) and data.get("ok") is False:
+                            raise requests.HTTPError(
+                                f"Telegram API error: {data.get('description', 'unknown')}",
+                                response=resp,
+                            )
                         sent_any = True
                     except requests.HTTPError:
+                        # Retry once without parse_mode for 400 responses; this handles
+                        # malformed HTML entity errors while keeping delivery resilient.
+                        failed_response = resp
+                        body = resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
+                        if parse_mode and getattr(resp, "status_code", None) == 400:
+                            fallback_payload = {
+                                "chat_id": chat_id,
+                                "text": text,
+                            }
+                            fallback_resp = requests.post(url, json=fallback_payload, timeout=10)
+                            try:
+                                fallback_resp.raise_for_status()
+                                try:
+                                    fallback_data = fallback_resp.json() if fallback_resp.text else None
+                                except ValueError:
+                                    raise requests.HTTPError(
+                                        "Telegram API returned non-JSON response body",
+                                        response=fallback_resp,
+                                    )
+                                if fallback_data is None:
+                                    raise requests.HTTPError(
+                                        "Telegram API returned empty response body; expected JSON with ok field",
+                                        response=fallback_resp,
+                                    )
+                                if isinstance(fallback_data, dict) and fallback_data.get("ok") is False:
+                                    raise requests.HTTPError(
+                                        f"Telegram API error: {fallback_data.get('description', 'unknown')}",
+                                        response=fallback_resp,
+                                    )
+                                sent_any = True
+                                continue
+                            except requests.HTTPError:
+                                failed_response = fallback_resp
+                                body = fallback_resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
                         logger.error(
                             "Telegram send failed for chat_id=%s (attempt %d/%d): status=%s body=%r",
                             chat_id,
                             attempt,
                             max_attempts,
-                            getattr(resp, "status_code", "n/a"),
-                            resp.text[:300],
+                            getattr(failed_response, "status_code", "n/a"),
+                            body,
                         )
                 if sent_any:
                     logger.info("Telegram message sent to %d chat(s)", len(self.chat_ids))
