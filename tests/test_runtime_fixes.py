@@ -41,6 +41,33 @@ class RuntimeFixesTests(unittest.TestCase):
             self.assertFalse(notifier.send_message("hello"))
             self.assertEqual(mocked_post.call_count, 3)
 
+    def test_telegram_notifier_uses_broadcast_channels_when_primary_missing(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        with patch.object(TelegramNotifier, "_resolve_chat_ids", return_value=["-100123", "-100456"]):
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="")
+            self.assertTrue(notifier.enabled)
+            self.assertEqual(notifier.chat_id, "-100123")
+            self.assertEqual(notifier.chat_ids, ["-100123", "-100456"])
+
+    def test_telegram_notifier_disables_on_invalid_chat_and_no_fallback(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        with patch.object(TelegramNotifier, "_resolve_chat_ids", return_value=[]):
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="invalid")
+            self.assertFalse(notifier.enabled)
+
+    def test_start_api_skips_boot_when_port_is_busy(self):
+        from main import start_api
+
+        with patch.dict(os.environ, {"API_HOST": "0.0.0.0", "API_PORT": "8000"}, clear=False):
+            with patch("main._release_port_if_needed", return_value=False):
+                with patch("signal_platform.models.init_db") as platform_init:
+                    with patch("uvicorn.run") as uvicorn_run:
+                        start_api()
+                        platform_init.assert_called_once()
+                        uvicorn_run.assert_not_called()
+
     def test_settings_startup_validation_flags_bad_token(self):
         import config.settings as settings_module
 

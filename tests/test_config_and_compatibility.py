@@ -27,6 +27,8 @@ class ConfigAndCompatibilityTests(unittest.TestCase):
                 "MAX_POSITIONS": "2",
                 "RSI_OVERSOLD": "28",
                 "RSI_OVERBOUGHT": "72",
+                "TELEGRAM_CHAT_ID": "",
+                "BROADCAST_TELEGRAM_CHANNELS": "-100123,invalid,789",
             },
             clear=False,
         ):
@@ -45,6 +47,9 @@ class ConfigAndCompatibilityTests(unittest.TestCase):
             self.assertEqual(reloaded.Settings.MAX_POSITIONS, 2)
             self.assertEqual(reloaded.Settings.RSI_OVERSOLD, 28)
             self.assertEqual(reloaded.Settings.RSI_OVERBOUGHT, 72)
+            self.assertEqual(reloaded.Settings.TELEGRAM_BROADCAST_CHANNELS, ["-100123", "789"])
+            self.assertTrue(reloaded.is_valid_telegram_chat_id("-100123"))
+            self.assertFalse(reloaded.is_valid_telegram_chat_id("invalid"))
 
     def test_backtester_pro_compatibility_import(self):
         from core.backtester_pro import ProfessionalBacktester

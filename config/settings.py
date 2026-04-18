@@ -4,6 +4,7 @@ All settings, API keys, trading parameters, and indicator configurations.
 """
 
 import os
+import re
 import warnings
 from pathlib import Path
 
@@ -47,6 +48,26 @@ def is_valid_telegram_token(token: str | None) -> bool:
     return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
 
 
+def is_valid_telegram_chat_id(chat_id: str | None) -> bool:
+    """Return True when chat_id looks like a Telegram numeric id/channel id."""
+    if chat_id is None:
+        return False
+    value = str(chat_id).strip()
+    return bool(re.fullmatch(r"-?\d+", value))
+
+
+def parse_telegram_channels(raw: str | None) -> list[str]:
+    """Parse comma-separated chat/channel ids and keep only valid values."""
+    channels: list[str] = []
+    if not raw:
+        return channels
+    for item in str(raw).split(","):
+        value = item.strip()
+        if is_valid_telegram_chat_id(value):
+            channels.append(value)
+    return channels
+
+
 class Settings:
     """Centralized configuration manager."""
 
@@ -74,6 +95,9 @@ class Settings:
         or os.getenv("TELEGRAM_TOKEN_BOT2", "")
     )
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    TELEGRAM_BROADCAST_CHANNELS: list[str] = parse_telegram_channels(
+        os.getenv("BROADCAST_TELEGRAM_CHANNELS", "")
+    )
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = _env_int("SMTP_PORT", 587)
@@ -218,8 +242,12 @@ class Settings:
         errors: list[str] = []
         if cls.TELEGRAM_BOT_TOKEN and not is_valid_telegram_token(cls.TELEGRAM_BOT_TOKEN):
             errors.append("TELEGRAM_BOT_TOKEN format is invalid (expected '<id>:<token>').")
-        if cls.TELEGRAM_CHAT_ID and not str(cls.TELEGRAM_CHAT_ID).strip():
-            errors.append("TELEGRAM_CHAT_ID is empty.")
+        if cls.TELEGRAM_CHAT_ID and not is_valid_telegram_chat_id(cls.TELEGRAM_CHAT_ID):
+            errors.append("TELEGRAM_CHAT_ID must be numeric (example: 123456789 or -1001234567890).")
+        if cls.TELEGRAM_BOT_TOKEN and not (
+            is_valid_telegram_chat_id(cls.TELEGRAM_CHAT_ID) or cls.TELEGRAM_BROADCAST_CHANNELS
+        ):
+            errors.append("Telegram enabled but no valid TELEGRAM_CHAT_ID or BROADCAST_TELEGRAM_CHANNELS set.")
         if not cls.DATABASE_URL:
             errors.append("DATABASE_URL is missing.")
         return errors
@@ -232,6 +260,11 @@ class Settings:
             "exchange_id": cls.EXCHANGE_ID,
             "api_rate_limit_per_minute": cls.API_RATE_LIMIT_PER_MINUTE,
             "scan_interval_seconds": cls.SCAN_INTERVAL_SECONDS,
-            "telegram_enabled": bool(cls.TELEGRAM_BOT_TOKEN and cls.TELEGRAM_CHAT_ID),
+            "telegram_enabled": bool(
+                cls.TELEGRAM_BOT_TOKEN
+                and (is_valid_telegram_chat_id(cls.TELEGRAM_CHAT_ID) or cls.TELEGRAM_BROADCAST_CHANNELS)
+            ),
+            "telegram_primary_chat_id": cls.TELEGRAM_CHAT_ID or None,
+            "telegram_broadcast_channels": cls.TELEGRAM_BROADCAST_CHANNELS,
             "finnhub_enabled": bool(cls.FINNHUB_API_KEY),
         }
