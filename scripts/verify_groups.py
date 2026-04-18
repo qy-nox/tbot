@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import requests
 
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 GROUP_KEYS = [f"SIGNAL_GROUP_{idx}_ID" for idx in range(1, 13)]
@@ -19,7 +18,7 @@ PLACEHOLDER_GROUP_IDS = {"-1001234567890", "-1001234567891"}
 def is_valid_telegram_chat_id(chat_id: str | None) -> bool:
     if chat_id is None:
         return False
-    return bool(re.fullmatch(r"-?\\d+", str(chat_id).strip()))
+    return bool(re.fullmatch(r"-?\d+", str(chat_id).strip()))
 
 
 def is_placeholder_telegram_group_id(chat_id: str | None) -> bool:
@@ -41,24 +40,23 @@ def _load_env(path: Path) -> dict[str, str]:
 
 
 def _api_get(token: str, method: str, **params) -> dict:
-    query = urlencode(params)
-    url = f"https://api.telegram.org/bot{token}/{method}"
-    if query:
-        url = f"{url}?{query}"
-    with urlopen(url, timeout=15) as response:  # nosec - Telegram endpoint
-        return json.loads(response.read().decode("utf-8"))
+    response = requests.get(
+        f"https://api.telegram.org/bot{token}/{method}",
+        params=params,
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def _api_post(token: str, method: str, payload: dict) -> dict:
-    body = json.dumps(payload).encode("utf-8")
-    req = Request(
+    response = requests.post(
         f"https://api.telegram.org/bot{token}/{method}",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        json=payload,
+        timeout=15,
     )
-    with urlopen(req, timeout=15) as response:  # nosec - Telegram endpoint
-        return json.loads(response.read().decode("utf-8"))
+    response.raise_for_status()
+    return response.json()
 
 
 def main() -> int:
@@ -91,7 +89,7 @@ def main() -> int:
 
         try:
             chat = _api_get(token, "getChat", chat_id=group_id)
-        except Exception as exc:  # pragma: no cover - network/runtime errors
+        except requests.RequestException as exc:  # pragma: no cover - network/runtime errors
             print(f"{key}: VERIFY_ERROR ({exc})")
             failures += 1
             continue
@@ -119,7 +117,7 @@ def main() -> int:
                 else:
                     print(f"  test: failed ({result.get('description', 'unknown')})")
                     failures += 1
-            except Exception as exc:  # pragma: no cover - network/runtime errors
+            except requests.RequestException as exc:  # pragma: no cover - network/runtime errors
                 print(f"  test: error ({exc})")
                 failures += 1
 

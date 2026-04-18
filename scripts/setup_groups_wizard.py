@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import urlopen
+
+import requests
 
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 GROUP_SLOTS = [
@@ -31,7 +30,7 @@ PLACEHOLDER_GROUP_IDS = {"-1001234567890", "-1001234567891"}
 def is_valid_telegram_chat_id(chat_id: str | None) -> bool:
     if chat_id is None:
         return False
-    return bool(re.fullmatch(r"-?\\d+", str(chat_id).strip()))
+    return bool(re.fullmatch(r"-?\d+", str(chat_id).strip()))
 
 
 def is_placeholder_telegram_group_id(chat_id: str | None) -> bool:
@@ -74,18 +73,19 @@ def _save_env_values(path: Path, updates: dict[str, str]) -> None:
 
 
 def _api_get(token: str, method: str, **params) -> dict:
-    query = urlencode(params)
-    url = f"https://api.telegram.org/bot{token}/{method}"
-    if query:
-        url = f"{url}?{query}"
-    with urlopen(url, timeout=15) as response:  # nosec - Telegram endpoint
-        return json.loads(response.read().decode("utf-8"))
+    response = requests.get(
+        f"https://api.telegram.org/bot{token}/{method}",
+        params=params,
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def _verify_group(token: str, group_id: str) -> tuple[bool, str]:
     try:
         payload = _api_get(token, "getChat", chat_id=group_id)
-    except Exception as exc:  # pragma: no cover - network/runtime errors
+    except requests.RequestException as exc:  # pragma: no cover - network/runtime errors
         return False, str(exc)
     if payload.get("ok") is True:
         title = payload.get("result", {}).get("title") or payload.get("result", {}).get("username") or "OK"

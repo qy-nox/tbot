@@ -175,16 +175,16 @@ class RuntimeFixesTests(unittest.TestCase):
             TELEGRAM_BROADCAST_CHANNELS=[],
             TELEGRAM_RETRY_ATTEMPTS=3,
         ):
-            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="-100999")
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="-100200")
             self.assertTrue(notifier.enabled)
 
-            missing_group = Mock()
-            missing_group.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
-            missing_group.status_code = 400
-            missing_group.text = '{"ok":false,"description":"Bad Request: chat not found"}'
-            missing_group.json.return_value = {"ok": False, "description": "Bad Request: chat not found"}
+            chat_not_found_response = Mock()
+            chat_not_found_response.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
+            chat_not_found_response.status_code = 400
+            chat_not_found_response.text = '{"ok":false,"description":"Bad Request: chat not found"}'
+            chat_not_found_response.json.return_value = {"ok": False, "description": "Bad Request: chat not found"}
 
-            with patch("notifications.telegram_notifier.requests.post", return_value=missing_group) as mocked_post:
+            with patch("notifications.telegram_notifier.requests.post", return_value=chat_not_found_response) as mocked_post:
                 self.assertFalse(notifier.send_message("hello"))
                 self.assertEqual(mocked_post.call_count, 1)
 

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
-from database.models import Group, Signal, User
+import requests
+
+from bots.main_signal_bot.distribution import MANAGED_GROUPS
 from config.settings import is_placeholder_telegram_group_id, is_valid_telegram_chat_id
+from database.models import Group, Signal, User
+
+logger = logging.getLogger(__name__)
 
 
 def list_users(db, limit: int = 20) -> list[User]:
@@ -54,8 +60,6 @@ def remove_group(db, *, group_id: str) -> bool:
 
 
 def test_group_access(*, token: str, group_id: str) -> tuple[bool, str]:
-    import requests
-
     value = str(group_id).strip()
     if not is_valid_telegram_chat_id(value):
         return False, "invalid_format"
@@ -71,6 +75,7 @@ def test_group_access(*, token: str, group_id: str) -> tuple[bool, str]:
         )
         payload = resp.json() if resp.text else {}
     except requests.RequestException as exc:  # pragma: no cover - network/runtime errors
+        logger.warning("Admin group access test failed for group_id=%s: %s", value, exc)
         return False, str(exc)
     if resp.status_code == 200 and isinstance(payload, dict) and payload.get("ok"):
         title = payload.get("result", {}).get("title") or payload.get("result", {}).get("username") or "ok"
@@ -81,8 +86,6 @@ def test_group_access(*, token: str, group_id: str) -> tuple[bool, str]:
 
 
 def setup_groups(db) -> list[Group]:
-    from bots.main_signal_bot.distribution import MANAGED_GROUPS
-
     created: list[Group] = []
     for index, item in enumerate(MANAGED_GROUPS, start=1):
         group_env = f"SIGNAL_GROUP_{index}_ID"

@@ -18,6 +18,7 @@ import os
 import smtplib
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
+from itertools import chain
 from typing import List, Optional
 
 import aiohttp
@@ -199,13 +200,12 @@ def _user_channels(user: User) -> list[tuple[DeliveryChannel, str]]:
 def _broadcast_targets() -> list[tuple[DeliveryChannel, str]]:
     """Return non-user broadcast targets from environment."""
     targets: list[tuple[DeliveryChannel, str]] = []
-    seen: set[str] = set()
-    raw_channels = list(Settings.TELEGRAM_BROADCAST_CHANNELS) + list(Settings.SIGNAL_GROUP_IDS)
-    for value in raw_channels:
+    processed_group_ids: set[str] = set()
+    for value in chain(Settings.TELEGRAM_BROADCAST_CHANNELS, Settings.SIGNAL_GROUP_IDS):
         ch = str(value).strip()
-        if not ch or ch in seen:
+        if not ch or ch in processed_group_ids:
             continue
-        seen.add(ch)
+        processed_group_ids.add(ch)
         if not is_valid_telegram_chat_id(ch):
             logger.warning("Skipping invalid Telegram group/chat id=%r in broadcast targets", ch)
             continue

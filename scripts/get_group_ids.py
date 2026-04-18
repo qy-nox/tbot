@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from urllib.parse import urlencode
-from urllib.request import urlopen
+
+import requests
 
 GROUP_ENV_KEYS = [f"SIGNAL_GROUP_{idx}_ID" for idx in range(1, 13)]
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
@@ -47,12 +46,13 @@ def _save_env_values(path: Path, updates: dict[str, str]) -> None:
 
 
 def _api_get(token: str, method: str, **params) -> dict:
-    query = urlencode(params)
-    url = f"https://api.telegram.org/bot{token}/{method}"
-    if query:
-        url = f"{url}?{query}"
-    with urlopen(url, timeout=15) as response:  # nosec - trusted Telegram API URL
-        return json.loads(response.read().decode("utf-8"))
+    response = requests.get(
+        f"https://api.telegram.org/bot{token}/{method}",
+        params=params,
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def _extract_chats(payload: dict) -> list[tuple[str, str]]:
@@ -85,7 +85,7 @@ def main() -> None:
 
     try:
         updates = _api_get(token, "getUpdates", timeout=30)
-    except Exception as exc:  # pragma: no cover - network/runtime errors
+    except requests.RequestException as exc:  # pragma: no cover - network/runtime errors
         print(f"ERROR: Failed to call Telegram API: {exc}")
         return
 
