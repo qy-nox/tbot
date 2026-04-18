@@ -1,0 +1,5 @@
+:root { color-scheme: dark; }
+body { font-family: Arial, sans-serif; margin: 2rem; background: #0f172a; color: #e2e8f0; }
+a { color: #38bdf8; margin-right: 1rem; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid #334155; padding: .5rem; }

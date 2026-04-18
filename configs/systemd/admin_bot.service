@@ -1,0 +1,14 @@
+[Unit]
+Description=TBOT Admin Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tbot
+EnvironmentFile=/opt/tbot/.env
+ExecStart=/usr/bin/python3 -m bots.admin_bot.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
