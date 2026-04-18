@@ -1,0 +1,14 @@
+[Unit]
+Description=TBOT Main Signal Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tbot
+EnvironmentFile=/opt/tbot/.env
+ExecStart=/usr/bin/python3 -m bots.main_signal_bot.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

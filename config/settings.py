@@ -104,6 +104,39 @@ class Settings:
     SMTP_USER: str = os.getenv("SMTP_USER", "")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
 
+
+    # ── Telegram Ecosystem (3-bot deployment) ──────────────────────────
+    TELEGRAM_BOT_TOKEN_MAIN_SIGNAL: str = os.getenv("TELEGRAM_BOT_TOKEN_MAIN_SIGNAL", TELEGRAM_BOT_TOKEN_MAIN)
+    TELEGRAM_BOT_TOKEN_SUBSCRIPTION: str = os.getenv("TELEGRAM_BOT_TOKEN_SUBSCRIPTION", TELEGRAM_BOT_TOKEN_SUB)
+    TELEGRAM_BOT_TOKEN_ADMIN_ECOSYSTEM: str = os.getenv("TELEGRAM_BOT_TOKEN_ADMIN_ECOSYSTEM", TELEGRAM_BOT_TOKEN_ADMIN)
+
+    # ── Payment Integrations ────────────────────────────────────────────
+    BINANCE_P2P_API_KEY: str = os.getenv("BINANCE_P2P_API_KEY", "")
+    BINANCE_P2P_API_SECRET: str = os.getenv("BINANCE_P2P_API_SECRET", "")
+    BKASH_APP_KEY: str = os.getenv("BKASH_APP_KEY", "")
+    BKASH_APP_SECRET: str = os.getenv("BKASH_APP_SECRET", "")
+    BKASH_USERNAME: str = os.getenv("BKASH_USERNAME", "")
+    BKASH_PASSWORD: str = os.getenv("BKASH_PASSWORD", "")
+    MANUAL_BANK_ACCOUNT_NAME: str = os.getenv("MANUAL_BANK_ACCOUNT_NAME", "")
+    MANUAL_BANK_ACCOUNT_NUMBER: str = os.getenv("MANUAL_BANK_ACCOUNT_NUMBER", "")
+    MANUAL_BANK_ROUTING: str = os.getenv("MANUAL_BANK_ROUTING", "")
+
+    # ── Managed Group IDs (12 groups) ───────────────────────────────────
+    SIGNAL_GROUP_IDS: list[str] = [
+        os.getenv("SIGNAL_GROUP_1_ID", ""),
+        os.getenv("SIGNAL_GROUP_2_ID", ""),
+        os.getenv("SIGNAL_GROUP_3_ID", ""),
+        os.getenv("SIGNAL_GROUP_4_ID", ""),
+        os.getenv("SIGNAL_GROUP_5_ID", ""),
+        os.getenv("SIGNAL_GROUP_6_ID", ""),
+        os.getenv("SIGNAL_GROUP_7_ID", ""),
+        os.getenv("SIGNAL_GROUP_8_ID", ""),
+        os.getenv("SIGNAL_GROUP_9_ID", ""),
+        os.getenv("SIGNAL_GROUP_10_ID", ""),
+        os.getenv("SIGNAL_GROUP_11_ID", ""),
+        os.getenv("SIGNAL_GROUP_12_ID", ""),
+    ]
+
     # ── Database ───────────────────────────────────────────────────────
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'trading_bot.db'}")
     DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 5)

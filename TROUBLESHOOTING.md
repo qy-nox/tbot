@@ -1,5 +1,27 @@
 # Troubleshooting
 
-- **No Telegram updates**: verify `TELEGRAM_BOT_TOKEN_MAIN` and `TELEGRAM_BOT_TOKEN_SUB`.
-- **No market prices**: check internet access and Binance availability.
-- **Admin page 404**: ensure `signal_platform/static/admin.html` exists and API server is running.
+## Telegram 400 Bad Request
+- Confirm `TELEGRAM_BOT_TOKEN` format (`<id>:<token>`).
+- Confirm `TELEGRAM_CHAT_ID` or broadcast group IDs are numeric.
+- Retry send without parse mode if message contains malformed HTML.
+
+## Port 8000 already in use
+- Stop stale process and restart one API instance only.
+- Verify supervisor/systemd is not launching duplicate API workers.
+
+## No signals visible
+- Check scanner logs for data source failures.
+- Confirm DB initialization and signal approval status.
+- Check `/api/signals` and `/dashboard/api/signals` payloads.
+
+## Payment queue stuck
+- Inspect `payments` and `payment_queue` rows for pending status.
+- Verify transaction ID uniqueness and admin verification path.
+
+## WebSocket stream interruptions
+- Verify outbound access to Binance websocket endpoints.
+- Monitor reconnect logs and tune reconnect delay if needed.
+
+## Database lock/contention
+- For SQLite, avoid multi-writer contention and keep transactions short.
+- Move to managed Postgres for production multi-process workloads.
