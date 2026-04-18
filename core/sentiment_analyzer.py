@@ -4,10 +4,16 @@ Combines TextBlob and VADER to score crypto-related news headlines.
 """
 
 import logging
+import statistics
+import threading
+import time
 from dataclasses import dataclass, field
 
+import requests
 from textblob import TextBlob
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from config.settings import Settings
 
 logger = logging.getLogger("trading_bot.sentiment_analyzer")
 
@@ -30,8 +36,14 @@ class SentimentAnalyzer:
 
     def __init__(self, vader_weight: float = 0.6, textblob_weight: float = 0.4):
         self.vader = SentimentIntensityAnalyzer()
+        total_weight = vader_weight + textblob_weight
+        if total_weight <= 0:
+            vader_weight, textblob_weight = 0.6, 0.4
         self.vader_weight = vader_weight
         self.textblob_weight = textblob_weight
+        self.newsapi_key = Settings.NEWSAPI_KEY
+        self._news_cache: dict[str, tuple[float, list[dict]]] = {}
+        self._cache_lock = threading.Lock()
         logger.info(
             "SentimentAnalyzer ready (VADER=%.0f%%, TextBlob=%.0f%%)",
             vader_weight * 100,
@@ -42,6 +54,8 @@ class SentimentAnalyzer:
 
     def analyse_headline(self, text: str) -> dict:
         """Return individual TextBlob and VADER scores for one headline."""
+        if not isinstance(text, str) or not text.strip():
+            return {"text": "", "textblob": 0.0, "vader": 0.0, "combined": 0.0}
         tb = TextBlob(text)
         tb_polarity = tb.sentiment.polarity  # -1 … +1
 
@@ -109,6 +123,124 @@ class SentimentAnalyzer:
         headlines = [a.get("headline", a.get("title", "")) for a in articles if a]
         headlines = [h for h in headlines if h]
         return self.analyse_headlines(headlines)
+
+    def analyse_newsapi(self, query: str = "crypto", language: str = "en", page_size: int = 20) -> SentimentResult:
+        """Fetch and analyse NewsAPI headlines if API key is configured."""
+        articles = self._fetch_newsapi_articles(query=query, language=language, page_size=page_size)
+        return self.analyse_articles(articles)
+
+    def analyse_multi_source(
+        self,
+        sources: dict[str, list[str] | list[dict]],
+        source_weights: dict[str, float] | None = None,
+    ) -> SentimentResult:
+        """Aggregate sentiment from multiple sources with weighted conflict handling."""
+        if not sources:
+            return SentimentResult()
+
+        source_weights = source_weights or {}
+        weighted_total = 0.0
+        weight_sum = 0.0
+        source_scores: list[float] = []
+        total_headlines = 0
+        details: list[dict] = []
+
+        for source_name, source_items in sources.items():
+            headlines = self._extract_headlines(source_items)
+            result = self.analyse_headlines(headlines)
+            weight = float(source_weights.get(source_name, 1.0))
+            if weight <= 0:
+                continue
+            weighted_total += result.combined_score * weight
+            weight_sum += weight
+            source_scores.append(result.combined_score)
+            total_headlines += result.headlines_analysed
+            details.append(
+                {
+                    "source": source_name,
+                    "weight": weight,
+                    "score": result.combined_score,
+                    "label": result.label,
+                    "headlines": result.headlines_analysed,
+                }
+            )
+
+        if weight_sum <= 0:
+            return SentimentResult(details=details)
+
+        combined = weighted_total / weight_sum
+        conflict_penalty = self._conflict_penalty(source_scores)
+        adjusted_score = combined * (1.0 - conflict_penalty)
+        return SentimentResult(
+            textblob_score=0.0,
+            vader_score=0.0,
+            combined_score=adjusted_score,
+            label=self._label(adjusted_score),
+            impact=self._impact(abs(adjusted_score)),
+            headlines_analysed=total_headlines,
+            details=details,
+        )
+
+    def _fetch_newsapi_articles(self, query: str, language: str, page_size: int) -> list[dict]:
+        if not self.newsapi_key:
+            logger.debug("NEWSAPI_KEY missing; skipping NewsAPI sentiment fetch")
+            return []
+
+        safe_page_size = max(1, min(int(page_size), 100))
+        cache_key = f"{query}|{language}|{safe_page_size}"
+        with self._cache_lock:
+            cached = self._news_cache.get(cache_key)
+            if cached and (time.time() - cached[0]) <= 120:
+                return cached[1]
+
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "q": query,
+            "language": language,
+            "sortBy": "publishedAt",
+            "pageSize": safe_page_size,
+            "apiKey": self.newsapi_key,
+        }
+        for attempt in range(1, Settings.EXCHANGE_RETRY_ATTEMPTS + 1):
+            try:
+                resp = requests.get(url, params=params, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                articles = data.get("articles", []) if isinstance(data, dict) else []
+                if isinstance(articles, list):
+                    with self._cache_lock:
+                        self._news_cache[cache_key] = (time.time(), articles)
+                    return articles
+                return []
+            except (requests.RequestException, ValueError) as exc:
+                if attempt >= Settings.EXCHANGE_RETRY_ATTEMPTS:
+                    logger.warning("NewsAPI fetch failed: %s", exc)
+                    return []
+                delay = min(Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), 15.0)
+                time.sleep(delay)
+        return []
+
+    @staticmethod
+    def _extract_headlines(source_items: list[str] | list[dict]) -> list[str]:
+        headlines: list[str] = []
+        for item in source_items:
+            if isinstance(item, str):
+                value = item.strip()
+                if value:
+                    headlines.append(value)
+                continue
+            if isinstance(item, dict):
+                value = str(item.get("headline") or item.get("title") or "").strip()
+                if value:
+                    headlines.append(value)
+        return headlines
+
+    @staticmethod
+    def _conflict_penalty(source_scores: list[float]) -> float:
+        if len(source_scores) <= 1:
+            return 0.0
+        dispersion = statistics.pstdev(source_scores)
+        return max(0.0, min(dispersion * 0.25, 0.35))
 
     # ── Helpers ─────────────────────────────────────────────────────────
 
