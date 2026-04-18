@@ -14,7 +14,6 @@ from config.settings import (
     Settings,
     is_valid_telegram_chat_id,
     is_valid_telegram_token,
-    parse_telegram_channels,
 )
 
 logger = logging.getLogger("trading_bot.telegram_notifier")
@@ -56,7 +55,7 @@ class TelegramNotifier:
                     primary,
                 )
 
-        channels = parse_telegram_channels(",".join(Settings.TELEGRAM_BROADCAST_CHANNELS))
+        channels = list(Settings.TELEGRAM_BROADCAST_CHANNELS)
         for channel in channels:
             if channel not in selected:
                 selected.append(channel)
@@ -87,18 +86,13 @@ class TelegramNotifier:
                         resp.raise_for_status()
                         sent_any = True
                     except requests.HTTPError:
-                        body = ""
-                        try:
-                            body = resp.text
-                        except Exception:  # pragma: no cover - defensive
-                            body = ""
                         logger.error(
                             "Telegram send failed for chat_id=%s (attempt %d/%d): status=%s body=%r",
                             chat_id,
                             attempt,
                             max_attempts,
                             getattr(resp, "status_code", "n/a"),
-                            body[:300],
+                            resp.text[:300],
                         )
                 if sent_any:
                     logger.info("Telegram message sent to %d chat(s)", len(self.chat_ids))
@@ -115,7 +109,13 @@ class TelegramNotifier:
         if not self.enabled:
             logger.error("Telegram test_connection skipped: notifier disabled (check token/chat_id).")
             return False
-        return self.send_message("✅ <b>Telegram connection test successful</b>")
+        try:
+            resp = requests.get(f"{self.api_url}/getMe", timeout=10)
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            logger.error("Telegram test_connection failed: %s", exc)
+            return False
 
     # ── Signal alert ────────────────────────────────────────────────────
 

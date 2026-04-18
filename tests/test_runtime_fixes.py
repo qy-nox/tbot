@@ -44,7 +44,11 @@ class RuntimeFixesTests(unittest.TestCase):
     def test_telegram_notifier_uses_broadcast_channels_when_primary_missing(self):
         from notifications.telegram_notifier import TelegramNotifier
 
-        with patch.object(TelegramNotifier, "_resolve_chat_ids", return_value=["-100123", "-100456"]):
+        with patch.multiple(
+            "notifications.telegram_notifier.Settings",
+            TELEGRAM_CHAT_ID="",
+            TELEGRAM_BROADCAST_CHANNELS=["-100123", "-100456"],
+        ):
             notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="")
             self.assertTrue(notifier.enabled)
             self.assertEqual(notifier.chat_id, "-100123")
@@ -53,7 +57,11 @@ class RuntimeFixesTests(unittest.TestCase):
     def test_telegram_notifier_disables_on_invalid_chat_and_no_fallback(self):
         from notifications.telegram_notifier import TelegramNotifier
 
-        with patch.object(TelegramNotifier, "_resolve_chat_ids", return_value=[]):
+        with patch.multiple(
+            "notifications.telegram_notifier.Settings",
+            TELEGRAM_CHAT_ID="invalid",
+            TELEGRAM_BROADCAST_CHANNELS=[],
+        ):
             notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="invalid")
             self.assertFalse(notifier.enabled)
 
@@ -67,6 +75,26 @@ class RuntimeFixesTests(unittest.TestCase):
                         start_api()
                         platform_init.assert_called_once()
                         uvicorn_run.assert_not_called()
+
+    def test_release_port_does_not_kill_when_force_kill_disabled(self):
+        from main import _release_port_if_needed
+
+        with patch.dict(os.environ, {"API_FORCE_KILL_PORT": "false"}, clear=False):
+            with patch("main._is_port_available", return_value=False):
+                with patch("main._port_owner_pids") as owner_pids:
+                    self.assertFalse(_release_port_if_needed("0.0.0.0", 8000))
+                    owner_pids.assert_not_called()
+
+    def test_release_port_skips_non_tbot_processes(self):
+        from main import _release_port_if_needed
+
+        with patch.dict(os.environ, {"API_FORCE_KILL_PORT": "true"}, clear=False):
+            with patch("main._is_port_available", return_value=False):
+                with patch("main._port_owner_pids", return_value=[1234]):
+                    with patch("main._pid_belongs_to_tbot", return_value=False):
+                        with patch("main.os.kill") as kill_mock:
+                            self.assertFalse(_release_port_if_needed("0.0.0.0", 8000, wait_seconds=0.1))
+                            kill_mock.assert_not_called()
 
     def test_settings_startup_validation_flags_bad_token(self):
         import config.settings as settings_module

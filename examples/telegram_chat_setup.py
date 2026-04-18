@@ -14,7 +14,10 @@ import requests
 def main() -> int:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
-        print("Missing TELEGRAM_BOT_TOKEN. Export it first and send a message to your bot.")
+        print(
+            "Missing TELEGRAM_BOT_TOKEN. Set it first, for example:\n"
+            "  export TELEGRAM_BOT_TOKEN=your_bot_token"
+        )
         return 1
 
     base_url = f"https://api.telegram.org/bot{token}"
