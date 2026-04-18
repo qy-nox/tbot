@@ -171,14 +171,14 @@ class BotManager:
         api_host = Settings.API_HOST if Settings.API_HOST != "0.0.0.0" else "localhost"
         api_port = Settings.API_PORT
         logger.info("\n📱 ACCESS YOUR SYSTEM:")
-        logger.info("  • Dashboard: http://%s:%s/dashboard/", api_host, api_port)
-        logger.info("  • API Docs: http://%s:%s/docs", api_host, api_port)
-        logger.info("  • API Health: http://%s:%s/api/health", api_host, api_port)
+        logger.info(f"  • Dashboard: http://{api_host}:{api_port}/dashboard/")
+        logger.info(f"  • API Docs: http://{api_host}:{api_port}/docs")
+        logger.info(f"  • API Health: http://{api_host}:{api_port}/api/health")
         logger.info("\n🤖 TELEGRAM BOTS:")
         logger.info("  • Bot 1: @YourMainBotName (live signals)")
         logger.info("  • Bot 2: @YourSubBotName (subscriptions)")
         logger.info("\n🛠️ ADMIN:")
-        logger.info("  • Admin Website: http://%s:%s/admin/", api_host, api_port)
+        logger.info(f"  • Admin Website: http://{api_host}:{api_port}/admin/")
         logger.info("\n💡 Press Ctrl+C to stop all services")
         logger.info("=" * 70 + "\n")
         

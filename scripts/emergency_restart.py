@@ -66,7 +66,12 @@ def main() -> int:
     _run("fix_port.py")
     _run("cleanup.py")
     print("starting services...")
-    subprocess.Popen([sys.executable, str(ROOT / "run.py")], cwd=ROOT, start_new_session=True)
+    try:
+        process = subprocess.Popen([sys.executable, str(ROOT / "run.py")], cwd=ROOT, start_new_session=True)
+    except OSError as exc:
+        print(f"ERROR: failed to start run.py: {exc}")
+        return 1
+    print(f"run.py started (pid={process.pid})")
     print("done. verify with: python scripts/health_check.py")
     return 0
 
