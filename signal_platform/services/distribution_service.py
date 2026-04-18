@@ -23,6 +23,7 @@ from typing import List, Optional
 import aiohttp
 from sqlalchemy.orm import Session
 
+from config.settings import Settings, is_placeholder_telegram_group_id, is_valid_telegram_chat_id
 from signal_platform.models import (
     DeliveryChannel,
     DeliveryStatus,
@@ -38,6 +39,10 @@ from signal_platform.schemas import DeliveryStatusResponse
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+
+
+class NonRetryableDeliveryError(RuntimeError):
+    """Error category for delivery failures that should not be retried."""
 
 # ── Telegram config ─────────────────────────────────────────────────────
 
@@ -194,11 +199,20 @@ def _user_channels(user: User) -> list[tuple[DeliveryChannel, str]]:
 def _broadcast_targets() -> list[tuple[DeliveryChannel, str]]:
     """Return non-user broadcast targets from environment."""
     targets: list[tuple[DeliveryChannel, str]] = []
-    tg_channels = os.getenv("BROADCAST_TELEGRAM_CHANNELS", "")
-    for ch in tg_channels.split(","):
-        ch = ch.strip()
-        if ch:
-            targets.append((DeliveryChannel.TELEGRAM, ch))
+    seen: set[str] = set()
+    raw_channels = list(Settings.TELEGRAM_BROADCAST_CHANNELS) + list(Settings.SIGNAL_GROUP_IDS)
+    for value in raw_channels:
+        ch = str(value).strip()
+        if not ch or ch in seen:
+            continue
+        seen.add(ch)
+        if not is_valid_telegram_chat_id(ch):
+            logger.warning("Skipping invalid Telegram group/chat id=%r in broadcast targets", ch)
+            continue
+        if is_placeholder_telegram_group_id(ch):
+            logger.warning("Skipping placeholder Telegram group/chat id=%r in broadcast targets", ch)
+            continue
+        targets.append((DeliveryChannel.TELEGRAM, ch))
     if DISCORD_WEBHOOK_URL:
         targets.append((DeliveryChannel.DISCORD, DISCORD_WEBHOOK_URL))
     return targets
@@ -280,6 +294,11 @@ def _send(db: Session, delivery: SignalDelivery, message: str) -> None:
         # Mark success
         delivery.status = DeliveryStatus.SENT
         delivery.sent_at = datetime.now(timezone.utc)
+    except NonRetryableDeliveryError as exc:
+        delivery.status = DeliveryStatus.FAILED
+        delivery.retry_count = MAX_RETRIES
+        delivery.error_message = str(exc)[:500]
+        logger.warning("Delivery #%d failed without retry: %s", delivery.id, exc)
     except Exception as exc:
         delivery.status = DeliveryStatus.FAILED
         delivery.error_message = str(exc)[:500]
@@ -291,6 +310,10 @@ def _send(db: Session, delivery: SignalDelivery, message: str) -> None:
 def _send_telegram(chat_id: str, text: str) -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN not configured")
+    if not is_valid_telegram_chat_id(chat_id):
+        raise NonRetryableDeliveryError(f"Invalid Telegram chat/group id format: {chat_id!r}")
+    if is_placeholder_telegram_group_id(chat_id):
+        raise NonRetryableDeliveryError(f"Placeholder Telegram group id configured: {chat_id!r}")
 
     loop = _get_or_create_event_loop()
     loop.run_until_complete(_async_send_telegram(chat_id, text))
@@ -303,6 +326,10 @@ async def _async_send_telegram(chat_id: str, text: str) -> None:
         async with session.post(url, json=payload) as resp:
             if resp.status != 200:
                 body = await resp.text()
+                if resp.status == 400 and "chat not found" in body.lower():
+                    raise NonRetryableDeliveryError(
+                        f"GROUP_NOT_FOUND for chat_id={chat_id}: verify group exists and bot is admin/member"
+                    )
                 raise RuntimeError(f"Telegram API error {resp.status}: {body}")
 
 

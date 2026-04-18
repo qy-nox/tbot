@@ -56,6 +56,19 @@ def is_valid_telegram_chat_id(chat_id: str | None) -> bool:
     return bool(re.fullmatch(r"-?\d+", value))
 
 
+PLACEHOLDER_TELEGRAM_GROUP_IDS = {
+    "-1001234567890",
+    "-1001234567891",
+}
+
+
+def is_placeholder_telegram_group_id(chat_id: str | None) -> bool:
+    """Return True when chat_id is a documented placeholder example."""
+    if chat_id is None:
+        return False
+    return str(chat_id).strip() in PLACEHOLDER_TELEGRAM_GROUP_IDS
+
+
 def parse_telegram_channels(raw: str | None) -> list[str]:
     """Parse comma-separated chat/channel ids and keep only valid values."""
     channels: list[str] = []
@@ -136,6 +149,20 @@ class Settings:
         os.getenv("SIGNAL_GROUP_11_ID", ""),
         os.getenv("SIGNAL_GROUP_12_ID", ""),
     ]
+    SIGNAL_GROUP_LABELS: tuple[str, ...] = (
+        "Crypto B Grade High Volume",
+        "Crypto B Grade VIP",
+        "Crypto A Grade High Volume",
+        "Crypto A Grade VIP",
+        "Crypto A+ Grade High Volume",
+        "Crypto A+ Grade VIP",
+        "Binary B Grade High Volume",
+        "Binary B Grade VIP",
+        "Binary A Grade High Volume",
+        "Binary A Grade VIP",
+        "Binary A+ Grade High Volume",
+        "Binary A+ Grade VIP",
+    )
 
     # ── Database ───────────────────────────────────────────────────────
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'trading_bot.db'}")
@@ -270,6 +297,28 @@ class Settings:
     TELEGRAM_RETRY_ATTEMPTS: int = _env_int("TELEGRAM_RETRY_ATTEMPTS", 3)
 
     @classmethod
+    def configured_signal_group_ids(cls) -> list[str]:
+        return [str(value).strip() for value in cls.SIGNAL_GROUP_IDS if str(value).strip()]
+
+    @classmethod
+    def invalid_signal_group_ids(cls) -> list[str]:
+        invalid: list[str] = []
+        for value in cls.configured_signal_group_ids():
+            if not is_valid_telegram_chat_id(value) or is_placeholder_telegram_group_id(value):
+                invalid.append(value)
+        return invalid
+
+    @classmethod
+    def valid_signal_group_ids(cls) -> list[str]:
+        valid: list[str] = []
+        for value in cls.configured_signal_group_ids():
+            if value in valid:
+                continue
+            if is_valid_telegram_chat_id(value) and not is_placeholder_telegram_group_id(value):
+                valid.append(value)
+        return valid
+
+    @classmethod
     def validate_startup_config(cls) -> list[str]:
         """Return configuration errors that should block optional integrations."""
         errors: list[str] = []
@@ -281,6 +330,15 @@ class Settings:
             is_valid_telegram_chat_id(cls.TELEGRAM_CHAT_ID) or cls.TELEGRAM_BROADCAST_CHANNELS
         ):
             errors.append("Telegram enabled but no valid TELEGRAM_CHAT_ID or BROADCAST_TELEGRAM_CHANNELS set.")
+        invalid_groups = cls.invalid_signal_group_ids()
+        if invalid_groups:
+            errors.append(
+                "Invalid SIGNAL_GROUP_*_ID entries detected: "
+                + ", ".join(invalid_groups)
+                + ". Use real Telegram group IDs and run scripts/setup_groups_wizard.py."
+            )
+        if cls.TELEGRAM_BOT_TOKEN and cls.configured_signal_group_ids() and not cls.valid_signal_group_ids():
+            errors.append("All configured SIGNAL_GROUP_*_ID entries are invalid; group distribution is disabled.")
         if not cls.DATABASE_URL:
             errors.append("DATABASE_URL is missing.")
         return errors
@@ -299,5 +357,8 @@ class Settings:
             ),
             "telegram_primary_chat_id": cls.TELEGRAM_CHAT_ID or None,
             "telegram_broadcast_channels": cls.TELEGRAM_BROADCAST_CHANNELS,
+            "signal_group_ids_configured": len(cls.configured_signal_group_ids()),
+            "signal_group_ids_valid": len(cls.valid_signal_group_ids()),
+            "signal_group_ids_invalid": cls.invalid_signal_group_ids(),
             "finnhub_enabled": bool(cls.FINNHUB_API_KEY),
         }

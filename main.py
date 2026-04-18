@@ -18,6 +18,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import requests
+
 from config.settings import Settings
 from core.exceptions import ValidationError
 from core.data_fetcher import DataFetcher
@@ -34,6 +36,39 @@ from utils.database import init_db, get_session, Signal as SignalModel
 from utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def verify_telegram_group_access(*, token: str, group_ids: list[str]) -> tuple[list[str], list[str]]:
+    """Verify bot can access configured Telegram groups."""
+    if not token or not group_ids:
+        return [], []
+    valid: list[str] = []
+    invalid: list[str] = []
+    for group_id in group_ids:
+        try:
+            resp = requests.get(
+                f"https://api.telegram.org/bot{token}/getChat",
+                params={"chat_id": group_id},
+                timeout=10,
+            )
+            payload = resp.json() if resp.text else {}
+            if resp.status_code == 200 and isinstance(payload, dict) and payload.get("ok"):
+                valid.append(group_id)
+            else:
+                description = ""
+                if isinstance(payload, dict):
+                    description = str(payload.get("description", "")).strip()
+                invalid.append(group_id)
+                logger.warning(
+                    "Startup group verification failed for chat_id=%s: status=%s description=%s",
+                    group_id,
+                    resp.status_code,
+                    description or "unknown",
+                )
+        except requests.RequestException as exc:
+            invalid.append(group_id)
+            logger.warning("Startup group verification failed for chat_id=%s: %s", group_id, exc)
+    return valid, invalid
 
 
 def _is_port_available(host: str, port: int) -> bool:
@@ -151,6 +186,24 @@ class TradingBot:
         self.notifier = TelegramNotifier()
         for error in Settings.validate_startup_config():
             logger.warning("Startup config warning: %s", error)
+        configured_groups = Settings.configured_signal_group_ids()
+        valid_group_ids = Settings.valid_signal_group_ids()
+        if configured_groups and not valid_group_ids:
+            logger.warning(
+                "No valid SIGNAL_GROUP_*_ID configured. Run scripts/setup_groups_wizard.py to set real Telegram IDs."
+            )
+        elif valid_group_ids:
+            verified, missing = verify_telegram_group_access(
+                token=Settings.TELEGRAM_BOT_TOKEN,
+                group_ids=valid_group_ids,
+            )
+            if verified:
+                logger.info("Startup group verification passed for %d group(s)", len(verified))
+            if missing:
+                logger.warning(
+                    "Startup group verification failed for %d group(s); those groups will be skipped by distribution",
+                    len(missing),
+                )
         logger.info("Startup config: %s", Settings.startup_snapshot())
 
         # ML engine (lazy-loaded to avoid import errors if deps missing)

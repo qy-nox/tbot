@@ -167,6 +167,27 @@ class RuntimeFixesTests(unittest.TestCase):
             ):
                 self.assertFalse(notifier.send_message("<b>bad < text</b>", parse_mode="HTML"))
 
+    def test_telegram_notifier_does_not_retry_chat_not_found(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        with patch.multiple(
+            "notifications.telegram_notifier.Settings",
+            TELEGRAM_BROADCAST_CHANNELS=[],
+            TELEGRAM_RETRY_ATTEMPTS=3,
+        ):
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="-100999")
+            self.assertTrue(notifier.enabled)
+
+            missing_group = Mock()
+            missing_group.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
+            missing_group.status_code = 400
+            missing_group.text = '{"ok":false,"description":"Bad Request: chat not found"}'
+            missing_group.json.return_value = {"ok": False, "description": "Bad Request: chat not found"}
+
+            with patch("notifications.telegram_notifier.requests.post", return_value=missing_group) as mocked_post:
+                self.assertFalse(notifier.send_message("hello"))
+                self.assertEqual(mocked_post.call_count, 1)
+
     def test_start_api_skips_boot_when_port_is_busy(self):
         from main import start_api
 
@@ -209,6 +230,45 @@ class RuntimeFixesTests(unittest.TestCase):
             self.assertTrue(reloaded.is_valid_telegram_token("12345:abcdefgh"))
 
         importlib.reload(settings_module)
+
+    def test_settings_startup_validation_flags_placeholder_group_ids(self):
+        import config.settings as settings_module
+
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_BOT_TOKEN": "12345:abcdefgh",
+                "TELEGRAM_CHAT_ID": "1",
+                "SIGNAL_GROUP_1_ID": "-1001234567890",
+            },
+            clear=False,
+        ):
+            reloaded = importlib.reload(settings_module)
+            errors = reloaded.Settings.validate_startup_config()
+            self.assertTrue(any("SIGNAL_GROUP_*_ID" in err for err in errors))
+            self.assertEqual(reloaded.Settings.invalid_signal_group_ids(), ["-1001234567890"])
+
+        importlib.reload(settings_module)
+
+    def test_distribution_service_skips_invalid_and_placeholder_group_ids(self):
+        from signal_platform.models import DeliveryChannel
+        from signal_platform.services import distribution_service
+
+        with patch.multiple(
+            "signal_platform.services.distribution_service.Settings",
+            TELEGRAM_BROADCAST_CHANNELS=["bad-id", "-1001234567890", "-100200"],
+            SIGNAL_GROUP_IDS=["", "-100300", "-1001234567891"],
+        ):
+            with patch.object(distribution_service, "DISCORD_WEBHOOK_URL", ""):
+                targets = distribution_service._broadcast_targets()
+
+        self.assertEqual(
+            targets,
+            [
+                (DeliveryChannel.TELEGRAM, "-100200"),
+                (DeliveryChannel.TELEGRAM, "-100300"),
+            ],
+        )
 
     def test_fallback_signal_generated_for_aligned_trend(self):
         from main import TradingBot

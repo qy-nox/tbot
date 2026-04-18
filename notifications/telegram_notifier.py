@@ -13,6 +13,7 @@ import requests
 from config.settings import (
     Settings,
     is_valid_telegram_chat_id,
+    is_placeholder_telegram_group_id,
     is_valid_telegram_token,
 )
 
@@ -49,7 +50,13 @@ class TelegramNotifier:
         primary = (override_chat_id or Settings.TELEGRAM_CHAT_ID or "").strip()
         if primary:
             if is_valid_telegram_chat_id(primary):
-                selected.append(primary)
+                if is_placeholder_telegram_group_id(primary):
+                    logger.error(
+                        "Ignoring placeholder TELEGRAM_CHAT_ID=%r. Replace with a real Telegram group id.",
+                        primary,
+                    )
+                else:
+                    selected.append(primary)
             else:
                 logger.error(
                     "Invalid TELEGRAM_CHAT_ID=%r. Expected numeric chat id like 123456789 or -1001234567890.",
@@ -63,6 +70,12 @@ class TelegramNotifier:
                 logger.error(
                     "Invalid TELEGRAM_BROADCAST_CHANNELS/BROADCAST_TELEGRAM_CHANNELS entry=%r. "
                     "Expected numeric chat id like 123456789 or -1001234567890.",
+                    value,
+                )
+                continue
+            if is_placeholder_telegram_group_id(value):
+                logger.error(
+                    "Ignoring placeholder broadcast group id=%r. Replace with a real Telegram group id.",
                     value,
                 )
                 continue
@@ -114,6 +127,13 @@ class TelegramNotifier:
                         # malformed HTML entity errors while keeping delivery resilient.
                         failed_response = resp
                         body = resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
+                        if self._is_group_not_found_error(resp):
+                            logger.error(
+                                "GROUP_NOT_FOUND: chat_id=%s is not accessible. "
+                                "Verify group exists, bot membership/admin access, then run scripts/verify_groups.py.",
+                                chat_id,
+                            )
+                            return False
                         if parse_mode and getattr(resp, "status_code", None) == 400:
                             fallback_payload = {
                                 "chat_id": chat_id,
@@ -144,6 +164,13 @@ class TelegramNotifier:
                             except requests.HTTPError:
                                 failed_response = fallback_resp
                                 body = fallback_resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
+                                if self._is_group_not_found_error(fallback_resp):
+                                    logger.error(
+                                        "GROUP_NOT_FOUND: chat_id=%s is not accessible. "
+                                        "Verify group exists, bot membership/admin access, then run scripts/verify_groups.py.",
+                                        chat_id,
+                                    )
+                                    return False
                         logger.error(
                             "Telegram send failed for chat_id=%s (attempt %d/%d): status=%s body=%r",
                             chat_id,
@@ -161,6 +188,19 @@ class TelegramNotifier:
                 # Linear backoff: 0.5s, 1.0s, 1.5s, ...
                 time.sleep(0.5 * attempt)
         return False
+
+    @staticmethod
+    def _is_group_not_found_error(response: requests.Response) -> bool:
+        if getattr(response, "status_code", None) != 400:
+            return False
+        body = str(getattr(response, "text", "")).lower()
+        if "chat not found" in body:
+            return True
+        try:
+            payload = response.json()
+        except ValueError:
+            return False
+        return "chat not found" in str((payload or {}).get("description", "")).lower()
 
     def test_connection(self) -> bool:
         """Validate Telegram token/chat configuration with a lightweight request."""

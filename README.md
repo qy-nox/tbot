@@ -79,6 +79,18 @@ For high-availability environments, run bots and API separately, use managed dat
 
 After startup, validate `/api/health`, dashboard routes, and Telegram bot connectivity. For first-run Telegram testing, verify chat IDs and send a lightweight confirmation message before enabling broad signal fanout.
 
+## Group Setup (Critical)
+
+If Telegram sends fail with `Bad Request: chat not found`, your group IDs are invalid or inaccessible.
+
+1. Create all 12 groups (crypto/binary × B/A/A+ × HV/VIP).
+2. Add your bot to each group and grant admin rights.
+3. Discover real IDs: `python scripts/get_group_ids.py`
+4. Save IDs interactively: `python scripts/setup_groups_wizard.py`
+5. Verify access: `python scripts/verify_groups.py --send-test`
+
+The bot now skips invalid/placeholder group IDs at startup and logs clear `GROUP_NOT_FOUND` errors when a group cannot be reached.
+
 ## Reliability and Error Handling
 
 The codebase uses structured exception handling for network/API boundaries, graceful websocket reconnect loops, database transaction boundaries, and startup config validation. Retry policies are present in notifier and stream components. Process supervision is available through both run manager and systemd restart settings.

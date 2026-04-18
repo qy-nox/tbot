@@ -3,6 +3,11 @@
 ## Telegram 400 Bad Request
 - Confirm `TELEGRAM_BOT_TOKEN` format (`<id>:<token>`).
 - Confirm `TELEGRAM_CHAT_ID` or broadcast group IDs are numeric.
+- If error is `Bad Request: chat not found`, run:
+  - `python scripts/get_group_ids.py`
+  - `python scripts/setup_groups_wizard.py`
+  - `python scripts/verify_groups.py --send-test`
+- Ensure bot is added to each group and has admin rights.
 - Retry send without parse mode if message contains malformed HTML.
 
 ## Port 8000 already in use
