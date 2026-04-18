@@ -43,6 +43,21 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_float(key: str, default: float) -> float:
+    raw = os.getenv(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        warnings.warn(
+            f"Invalid float for {key}={raw!r}; using fallback {default}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+
+
 def is_valid_telegram_token(token: str | None) -> bool:
     """Return True when token follows Telegram '<id>:<secret>' shape."""
     return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
@@ -295,6 +310,15 @@ class Settings:
     LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
     LOG_BACKUP_COUNT: int = 5
     TELEGRAM_RETRY_ATTEMPTS: int = _env_int("TELEGRAM_RETRY_ATTEMPTS", 3)
+    TELEGRAM_RETRY_BACKOFF_SECONDS: float = _env_float("TELEGRAM_RETRY_BACKOFF_SECONDS", 0.5)
+    TELEGRAM_RETRY_MAX_BACKOFF_SECONDS: float = _env_float("TELEGRAM_RETRY_MAX_BACKOFF_SECONDS", 8.0)
+    TELEGRAM_CONNECT_TIMEOUT_SECONDS: float = _env_float("TELEGRAM_CONNECT_TIMEOUT_SECONDS", 10.0)
+    TELEGRAM_READ_TIMEOUT_SECONDS: float = _env_float("TELEGRAM_READ_TIMEOUT_SECONDS", 20.0)
+    TELEGRAM_STARTUP_VALIDATE_CONNECTIVITY: bool = (
+        os.getenv("TELEGRAM_STARTUP_VALIDATE_CONNECTIVITY", "true").lower() == "true"
+    )
+    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_PORT: int = _env_int("API_PORT", 8000)
 
     @classmethod
     def configured_signal_group_ids(cls) -> list[str]:
@@ -341,6 +365,8 @@ class Settings:
             errors.append("All configured SIGNAL_GROUP_*_ID entries are invalid; group distribution is disabled.")
         if not cls.DATABASE_URL:
             errors.append("DATABASE_URL is missing.")
+        if cls.API_PORT <= 0 or cls.API_PORT > 65535:
+            errors.append("API_PORT must be between 1 and 65535.")
         return errors
 
     @classmethod
@@ -351,6 +377,8 @@ class Settings:
             "exchange_id": cls.EXCHANGE_ID,
             "api_rate_limit_per_minute": cls.API_RATE_LIMIT_PER_MINUTE,
             "scan_interval_seconds": cls.SCAN_INTERVAL_SECONDS,
+            "api_host": cls.API_HOST,
+            "api_port": cls.API_PORT,
             "telegram_enabled": bool(
                 cls.TELEGRAM_BOT_TOKEN
                 and (is_valid_telegram_chat_id(cls.TELEGRAM_CHAT_ID) or cls.TELEGRAM_BROADCAST_CHANNELS)

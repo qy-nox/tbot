@@ -9,9 +9,11 @@ from typing import Any
 
 try:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.error import NetworkError, TimedOut
     from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 except ModuleNotFoundError as exc:  # pragma: no cover - import-time fallback
     InlineKeyboardButton = InlineKeyboardMarkup = Update = Any
+    NetworkError = TimedOut = Exception
     Application = CallbackQueryHandler = CommandHandler = ContextTypes = Any
     _TELEGRAM_IMPORT_ERROR = exc
 else:
@@ -148,7 +150,27 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(bot.callback))
 
     logger.info("Starting main signal bot")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    max_attempts = max(1, int(os.getenv("TELEGRAM_RETRY_ATTEMPTS", "3")))
+    base_backoff = max(0.1, float(os.getenv("TELEGRAM_RETRY_BACKOFF_SECONDS", "0.5")))
+    max_backoff = max(base_backoff, float(os.getenv("TELEGRAM_RETRY_MAX_BACKOFF_SECONDS", "8.0")))
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            app.run_polling(allowed_updates=Update.ALL_TYPES)
+            return
+        except (TimedOut, NetworkError) as exc:
+            if attempt >= max_attempts:
+                logger.error("Main signal bot stopped after repeated Telegram timeouts: %s", exc)
+                raise
+            delay = min(base_backoff * (2 ** (attempt - 1)), max_backoff)
+            logger.warning(
+                "Telegram polling timeout/network error (attempt %d/%d): %s. Retrying in %.1fs",
+                attempt,
+                max_attempts,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

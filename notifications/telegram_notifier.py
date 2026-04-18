@@ -35,6 +35,10 @@ class TelegramNotifier:
         self.chat_ids = self._resolve_chat_ids(chat_id)
         self.chat_id = self.chat_ids[0] if self.chat_ids else ""
         self.api_url = self.BASE_URL.format(token=self.token) if self.token else ""
+        self.request_timeout = (
+            max(0.1, float(Settings.TELEGRAM_CONNECT_TIMEOUT_SECONDS)),
+            max(0.1, float(Settings.TELEGRAM_READ_TIMEOUT_SECONDS)),
+        )
         self.enabled = bool(is_valid_telegram_token(self.token) and self.chat_ids)
         if not self.enabled:
             logger.warning(
@@ -104,7 +108,7 @@ class TelegramNotifier:
                     }
                     if parse_mode:
                         payload["parse_mode"] = parse_mode
-                    resp = requests.post(url, json=payload, timeout=10)
+                    resp = requests.post(url, json=payload, timeout=self.request_timeout)
                     try:
                         resp.raise_for_status()
                         try:
@@ -139,7 +143,7 @@ class TelegramNotifier:
                                 "chat_id": chat_id,
                                 "text": text,
                             }
-                            fallback_resp = requests.post(url, json=fallback_payload, timeout=10)
+                            fallback_resp = requests.post(url, json=fallback_payload, timeout=self.request_timeout)
                             try:
                                 fallback_resp.raise_for_status()
                                 try:
@@ -185,8 +189,11 @@ class TelegramNotifier:
             except requests.RequestException as exc:
                 logger.error("Telegram send failed (attempt %d/%d): %s", attempt, max_attempts, exc)
             if attempt < max_attempts:
-                # Linear backoff: 0.5s, 1.0s, 1.5s, ...
-                time.sleep(0.5 * attempt)
+                base = max(0.1, float(Settings.TELEGRAM_RETRY_BACKOFF_SECONDS))
+                cap = max(base, float(Settings.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS))
+                # Exponential backoff: base, base*2, base*4 ...
+                delay = min(base * (2 ** (attempt - 1)), cap)
+                time.sleep(delay)
         return False
 
     @staticmethod
@@ -208,7 +215,7 @@ class TelegramNotifier:
             logger.error("Telegram test_connection skipped: notifier disabled (check token/chat_id).")
             return False
         try:
-            resp = requests.get(f"{self.api_url}/getMe", timeout=10)
+            resp = requests.get(f"{self.api_url}/getMe", timeout=self.request_timeout)
             resp.raise_for_status()
             return True
         except requests.RequestException as exc:

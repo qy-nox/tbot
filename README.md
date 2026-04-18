@@ -115,6 +115,14 @@ If Telegram messages fail with HTTP 400, validate chat IDs and parse mode payloa
 
 A longer checklist is in `TROUBLESHOOTING.md`, including database lock handling, token validation, and deployment sanity checks.
 
+### Runtime Recovery Scripts
+
+- `python scripts/fix_port.py` — release busy API port (defaults to `API_PORT`)
+- `python scripts/diagnose.py` — run port/network/token/group diagnostics
+- `python scripts/health_check.py` — check API + env + Telegram token health
+- `python scripts/cleanup.py` — remove logs/cache/temp artifacts
+- `python scripts/emergency_restart.py` — stop stale tbot processes, clean, and restart
+
 ## Production Checklist
 
 - [ ] Environment variables validated
