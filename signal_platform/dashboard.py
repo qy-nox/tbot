@@ -277,6 +277,12 @@ if (window.Chart) {{
 function renderSignals(rows) {{
   const tbody = document.getElementById('recentSignalsBody');
   if (!tbody) return;
+  const esc = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
   if (!rows || !rows.length) {{
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8b949e;">No signals yet</td></tr>';
     return;
@@ -290,15 +296,20 @@ function renderSignals(rows) {{
     const confidence = Math.round(Number(s.confidence || 0) * 100);
     const grade = s.grade || '-';
     const type = String(s.type || 'crypto');
+    const safeTime = esc(s.time || '');
+    const safePair = esc(s.pair || '');
+    const safeDirection = esc(direction);
+    const safeGrade = esc(grade);
+    const safeOutcome = esc(outcome.replaceAll('_', ' ').toUpperCase());
     return `<tr class="${{outcomeCls}}">
-      <td>${{s.time || ''}}</td>
+      <td>${{safeTime}}</td>
       <td><span class="badge badge-${{type === 'crypto' ? 'crypto' : 'binary'}}">${{type.toUpperCase()}}</span></td>
-      <td><strong>${{s.pair || ''}}</strong></td>
-      <td>${{directionEmoji}} ${{direction}}</td>
+      <td><strong>${{safePair}}</strong></td>
+      <td>${{directionEmoji}} ${{safeDirection}}</td>
       <td>${{entry}}</td>
       <td>${{confidence}}%</td>
-      <td><span class="grade">${{grade}}</span></td>
-      <td><span class="outcome outcome-${{outcomeCls}}">${{outcome.replaceAll('_', ' ').toUpperCase()}}</span></td>
+      <td><span class="grade">${{safeGrade}}</span></td>
+      <td><span class="outcome outcome-${{outcomeCls}}">${{safeOutcome}}</span></td>
     </tr>`;
   }}).join('');
 }}

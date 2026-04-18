@@ -15,6 +15,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from config.settings import is_valid_telegram_token
+
 # Configure logging (console + file)
 _log_file = Path(__file__).resolve().parent / "logs" / "runner.log"
 _log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -102,10 +104,6 @@ class BotManager:
         return None
 
     @staticmethod
-    def _validate_token_format(token: str | None) -> bool:
-        return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
-
-    @staticmethod
     def _check_db_health() -> bool:
         try:
             from sqlalchemy import text
@@ -150,7 +148,7 @@ class BotManager:
                 if token is None:
                     logger.warning(f"    ⏭️  Skipping {bot['name']} - no token configured")
                     continue
-                if token != self.NO_TOKEN_REQUIRED and not self._validate_token_format(token):
+                if token != self.NO_TOKEN_REQUIRED and not is_valid_telegram_token(token):
                     logger.warning(f"    ⏭️  Skipping {bot['name']} - invalid token format")
                     continue
 
@@ -211,6 +209,7 @@ class BotManager:
                         continue
 
                     logger.info(f"🔁 Restarting {bot_name} (attempt {restarts + 1}/{self.max_restarts})")
+                    # Exponential backoff per retry attempt, capped at 60s.
                     backoff_seconds = min(2 ** (restarts + 1), 60)
                     logger.info(f"    ⏱️ Backoff: waiting {backoff_seconds}s before restart")
                     time.sleep(backoff_seconds)

@@ -42,6 +42,11 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def is_valid_telegram_token(token: str | None) -> bool:
+    """Return True when token follows Telegram '<id>:<secret>' shape."""
+    return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
+
+
 class Settings:
     """Centralized configuration manager."""
 
@@ -145,7 +150,7 @@ class Settings:
     ATR_PERIOD: int = int(os.getenv("ATR_PERIOD", "14"))
 
     # ── Signal Thresholds ──────────────────────────────────────────────
-    MIN_SIGNAL_CONFIDENCE: float = 0.55  # 55% minimum confidence
+    MIN_SIGNAL_CONFIDENCE: float = 0.6  # 60% minimum confidence
     MIN_INDICATORS_AGREE: int = 2  # At least 2 out of 3 must agree
 
     # ── Risk Management ────────────────────────────────────────────────
@@ -205,12 +210,13 @@ class Settings:
     LOG_FILE: str = "trading_bot.log"
     LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
     LOG_BACKUP_COUNT: int = 5
+    TELEGRAM_RETRY_ATTEMPTS: int = _env_int("TELEGRAM_RETRY_ATTEMPTS", 3)
 
     @classmethod
     def validate_startup_config(cls) -> list[str]:
         """Return configuration errors that should block optional integrations."""
         errors: list[str] = []
-        if cls.TELEGRAM_BOT_TOKEN and ":" not in cls.TELEGRAM_BOT_TOKEN:
+        if cls.TELEGRAM_BOT_TOKEN and not is_valid_telegram_token(cls.TELEGRAM_BOT_TOKEN):
             errors.append("TELEGRAM_BOT_TOKEN format is invalid (expected '<id>:<token>').")
         if cls.TELEGRAM_CHAT_ID and not str(cls.TELEGRAM_CHAT_ID).strip():
             errors.append("TELEGRAM_CHAT_ID is empty.")

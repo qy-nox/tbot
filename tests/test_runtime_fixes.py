@@ -48,8 +48,37 @@ class RuntimeFixesTests(unittest.TestCase):
             reloaded = importlib.reload(settings_module)
             errors = reloaded.Settings.validate_startup_config()
             self.assertTrue(any("TELEGRAM_BOT_TOKEN" in err for err in errors))
+            self.assertFalse(reloaded.is_valid_telegram_token("bad"))
+            self.assertTrue(reloaded.is_valid_telegram_token("12345:abcdefgh"))
 
         importlib.reload(settings_module)
+
+    def test_fallback_signal_generated_for_aligned_trend(self):
+        from main import TradingBot
+
+        analysis = {
+            "trend": "UPTREND",
+            "close": 100.0,
+            "atr": 2.0,
+            "ema_fast": 105.0,
+            "ema_medium": 100.0,
+        }
+        signal = TradingBot._fallback_signal("BTC/USDT", analysis)
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "BUY")
+        self.assertGreater(signal.take_profit_1, signal.entry_price)
+        self.assertLess(signal.stop_loss, signal.entry_price)
+
+    def test_fallback_signal_not_generated_for_invalid_input(self):
+        from main import TradingBot
+
+        self.assertIsNone(TradingBot._fallback_signal("BTC/USDT", {"trend": "SIDEWAYS"}))
+        self.assertIsNone(
+            TradingBot._fallback_signal(
+                "BTC/USDT",
+                {"trend": "UPTREND", "close": 100.0, "atr": 1.0, "ema_fast": None, "ema_medium": 90.0},
+            )
+        )
 
 
 if __name__ == "__main__":

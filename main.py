@@ -169,7 +169,11 @@ class TradingBot:
         # 10. Send Telegram notification
         sent_ok = self.notifier.send_signal(signal)
         if not sent_ok:
-            logger.warning("%s: telegram notification failed", pair)
+            logger.warning(
+                "%s: telegram notification failed after %d attempts",
+                pair,
+                max(1, Settings.TELEGRAM_RETRY_ATTEMPTS),
+            )
 
         # 11. Store in platform & distribute to subscribers
         self._platform_distribute(signal, analysis)
