@@ -39,6 +39,8 @@ class TelegramNotifier:
             max(0.1, float(Settings.TELEGRAM_CONNECT_TIMEOUT_SECONDS)),
             max(0.1, float(Settings.TELEGRAM_READ_TIMEOUT_SECONDS)),
         )
+        self.retry_backoff_base = max(0.1, float(Settings.TELEGRAM_RETRY_BACKOFF_SECONDS))
+        self.retry_backoff_cap = max(self.retry_backoff_base, float(Settings.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS))
         self.enabled = bool(is_valid_telegram_token(self.token) and self.chat_ids)
         if not self.enabled:
             logger.warning(
@@ -189,10 +191,8 @@ class TelegramNotifier:
             except requests.RequestException as exc:
                 logger.error("Telegram send failed (attempt %d/%d): %s", attempt, max_attempts, exc)
             if attempt < max_attempts:
-                base = max(0.1, float(Settings.TELEGRAM_RETRY_BACKOFF_SECONDS))
-                cap = max(base, float(Settings.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS))
                 # Exponential backoff: base, base*2, base*4 ...
-                delay = min(base * (2 ** (attempt - 1)), cap)
+                delay = min(self.retry_backoff_base * (2 ** (attempt - 1)), self.retry_backoff_cap)
                 time.sleep(delay)
         return False
 

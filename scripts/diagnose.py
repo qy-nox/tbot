@@ -6,11 +6,13 @@ import os
 import re
 import socket
 from pathlib import Path
+from json import JSONDecodeError
 
 import requests
 
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 PLACEHOLDER_GROUP_IDS = {"-1001234567890", "-1001234567891"}
+SIGNAL_GROUP_COUNT = 12
 
 
 def _load_env(path: Path) -> dict[str, str]:
@@ -65,7 +67,9 @@ def _check_token(token: str) -> tuple[bool, str]:
         return False, "TELEGRAM_BOT_TOKEN format is invalid (expected '<id>:<token>')"
     try:
         resp = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
-        payload = resp.json() if resp.text else {}
+        payload = resp.json()
+    except JSONDecodeError:
+        payload = {}
     except requests.RequestException as exc:
         message = str(exc)
         if token:
@@ -98,7 +102,10 @@ def _check_groups(token: str, groups: list[str]) -> list[str]:
                 params={"chat_id": group_id},
                 timeout=10,
             )
-            payload = resp.json() if resp.text else {}
+            try:
+                payload = resp.json()
+            except JSONDecodeError:
+                payload = {}
         except requests.RequestException as exc:
             messages.append(f"GROUP_VERIFY_ERROR: {group_id} ({exc})")
             continue
@@ -118,7 +125,7 @@ def main() -> int:
     token = _env_or_file(env_data, "TELEGRAM_BOT_TOKEN")
     groups = [
         _env_or_file(env_data, f"SIGNAL_GROUP_{idx}_ID")
-        for idx in range(1, 13)
+        for idx in range(1, SIGNAL_GROUP_COUNT + 1)
         if _env_or_file(env_data, f"SIGNAL_GROUP_{idx}_ID")
     ]
 

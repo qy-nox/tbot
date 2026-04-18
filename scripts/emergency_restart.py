@@ -72,7 +72,12 @@ def main() -> int:
         print(f"ERROR: failed to start run.py: {exc}")
         return 1
     print(f"run.py started (pid={process.pid})")
-    print("done. verify with: python scripts/health_check.py")
+    time.sleep(2.0)
+    health = subprocess.run([sys.executable, str(ROOT / "scripts" / "health_check.py")], cwd=ROOT, check=False)
+    if health.returncode != 0:
+        print("WARN: health_check reported issues; inspect logs and configuration.")
+        return 1
+    print("done.")
     return 0
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from json import JSONDecodeError
 
 import requests
 
@@ -29,7 +30,10 @@ def main() -> int:
 
     try:
         resp = requests.get(f"{_api_base()}/api/health", timeout=5)
-        payload = resp.json() if resp.text else {}
+        try:
+            payload = resp.json()
+        except JSONDecodeError:
+            payload = {}
         if resp.status_code == 200:
             print(f"OK   API health reachable ({payload.get('status', 'ok')})")
         else:

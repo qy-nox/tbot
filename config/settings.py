@@ -367,6 +367,8 @@ class Settings:
             errors.append("DATABASE_URL is missing.")
         if cls.API_PORT <= 0 or cls.API_PORT > 65535:
             errors.append("API_PORT must be between 1 and 65535.")
+        if cls.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS < cls.TELEGRAM_RETRY_BACKOFF_SECONDS:
+            errors.append("TELEGRAM_RETRY_MAX_BACKOFF_SECONDS must be >= TELEGRAM_RETRY_BACKOFF_SECONDS.")
         return errors
 
     @classmethod

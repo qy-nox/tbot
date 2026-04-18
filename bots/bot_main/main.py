@@ -7,13 +7,26 @@ import os
 import time
 from typing import Any
 
+from config.settings import Settings
+
+class _TelegramTimedOutFallback(Exception):
+    """Fallback timeout exception when telegram package is unavailable."""
+    pass
+
+
+class _TelegramNetworkErrorFallback(Exception):
+    """Fallback network exception when telegram package is unavailable."""
+    pass
+
+
 try:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
     from telegram.error import NetworkError, TimedOut
     from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 except ModuleNotFoundError as exc:  # pragma: no cover - import-time fallback
     InlineKeyboardButton = InlineKeyboardMarkup = Update = Any
-    NetworkError = TimedOut = Exception
+    NetworkError = _TelegramNetworkErrorFallback
+    TimedOut = _TelegramTimedOutFallback
     Application = CallbackQueryHandler = CommandHandler = ContextTypes = Any
     _TELEGRAM_IMPORT_ERROR = exc
 else:
@@ -150,9 +163,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(bot.callback))
 
     logger.info("Starting main signal bot")
-    max_attempts = max(1, int(os.getenv("TELEGRAM_RETRY_ATTEMPTS", "3")))
-    base_backoff = max(0.1, float(os.getenv("TELEGRAM_RETRY_BACKOFF_SECONDS", "0.5")))
-    max_backoff = max(base_backoff, float(os.getenv("TELEGRAM_RETRY_MAX_BACKOFF_SECONDS", "8.0")))
+    max_attempts = max(1, Settings.TELEGRAM_RETRY_ATTEMPTS)
+    base_backoff = max(0.1, Settings.TELEGRAM_RETRY_BACKOFF_SECONDS)
+    max_backoff = max(base_backoff, Settings.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS)
 
     for attempt in range(1, max_attempts + 1):
         try:
