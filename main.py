@@ -9,6 +9,11 @@ Supports two modes:
 
 import argparse
 import logging
+import os
+import platform
+import signal as os_signal
+import socket
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -29,6 +34,104 @@ from utils.database import init_db, get_session, Signal as SignalModel
 from utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _is_port_available(host: str, port: int) -> bool:
+    """Return True when the requested host/port can be bound."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def _port_owner_pids(port: int) -> list[int]:
+    """Best-effort lookup for PIDs currently listening on *port*.
+
+    Returns [] when no processes are found, or when pid discovery tools
+    are unavailable in the current environment.
+    """
+    if platform.system().lower().startswith("win"):
+        logger.warning("API_FORCE_KILL_PORT currently supports Unix-like systems only.")
+        return []
+
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f"tcp:{port}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        logger.warning("lsof not found; cannot auto-kill process on port %d", port)
+        return []
+
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        value = line.strip()
+        if value.isdigit():
+            pid = int(value)
+            if pid != os.getpid():
+                pids.append(pid)
+    return pids
+
+
+def _pid_belongs_to_tbot(pid: int) -> bool:
+    """Best-effort process ownership check to avoid terminating unrelated services."""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return False
+    cmd = result.stdout.strip().lower()
+    return "tbot" in cmd or "main.py --both" in cmd or "main.py --api" in cmd
+
+
+def _release_port_if_needed(host: str, port: int, wait_seconds: float = 5.0) -> bool:
+    """Attempt to free occupied port and wait for availability."""
+    if _is_port_available(host, port):
+        return True
+
+    kill_enabled = os.getenv("API_FORCE_KILL_PORT", "false").lower() == "true"
+    if not kill_enabled:
+        logger.warning(
+            "Port %d is already in use and API_FORCE_KILL_PORT is disabled; "
+            "not terminating external processes.",
+            port,
+        )
+        return False
+
+    logger.warning("Port %d is already in use; attempting to release it", port)
+    pids = _port_owner_pids(port)
+    if not pids:
+        return False
+
+    for pid in pids:
+        if not _pid_belongs_to_tbot(pid):
+            logger.warning("Skipping PID %d on port %d (not recognized as tbot process)", pid, port)
+            continue
+        try:
+            os.kill(pid, os_signal.SIGTERM)
+            logger.warning("Sent SIGTERM to PID %d using port %d", pid, port)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            logger.error("Permission denied while terminating PID %d on port %d", pid, port)
+
+    deadline = time.time() + max(0.5, wait_seconds)
+    while time.time() < deadline:
+        if _is_port_available(host, port):
+            return True
+        time.sleep(0.2)
+    return _is_port_available(host, port)
 
 
 class TradingBot:
@@ -463,7 +566,6 @@ class TradingBot:
 
 def start_api() -> None:
     """Start the FastAPI server (blocking)."""
-    import os
     import uvicorn
     from signal_platform.models import init_db as platform_init
     from signal_platform.api.app import app
@@ -472,8 +574,19 @@ def start_api() -> None:
 
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
+    if not _release_port_if_needed(host, port):
+        logger.error(
+            "Cannot start API server on %s:%d because the port is busy. "
+            "Set a different API_PORT or stop the existing process.",
+            host,
+            port,
+        )
+        return
     logger.info("Starting API server on %s:%d", host, port)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    except OSError as exc:
+        logger.error("API server failed to bind on %s:%d: %s", host, port, exc)
 
 
 # ── Entry point ─────────────────────────────────────────────────────────
