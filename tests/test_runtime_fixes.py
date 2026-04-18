@@ -54,7 +54,7 @@ class RuntimeFixesTests(unittest.TestCase):
             self.assertEqual(notifier.chat_id, "-100123")
             self.assertEqual(notifier.chat_ids, ["-100123", "-100456"])
 
-    def test_telegram_notifier_filters_invalid_broadcast_channels(self):
+    def test_telegram_notifier_filters_invalid_broadcast_channel_entries(self):
         from notifications.telegram_notifier import TelegramNotifier
 
         with patch.multiple(
@@ -85,7 +85,7 @@ class RuntimeFixesTests(unittest.TestCase):
         self.assertTrue(notifier.enabled)
 
         failed_html = Mock()
-        failed_html.raise_for_status.side_effect = requests.HTTPError("bad request")
+        failed_html.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
         failed_html.status_code = 400
         failed_html.text = "Bad Request: can't parse entities"
 
@@ -115,6 +115,57 @@ class RuntimeFixesTests(unittest.TestCase):
         with patch.multiple("notifications.telegram_notifier.Settings", TELEGRAM_RETRY_ATTEMPTS=1):
             with patch("notifications.telegram_notifier.requests.post", return_value=response):
                 self.assertFalse(notifier.send_message("hello"))
+
+    def test_telegram_notifier_treats_non_json_success_body_as_failure(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        with patch.multiple(
+            "notifications.telegram_notifier.Settings",
+            TELEGRAM_BROADCAST_CHANNELS=[],
+            TELEGRAM_RETRY_ATTEMPTS=1,
+        ):
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="12345")
+            self.assertTrue(notifier.enabled)
+
+            response = Mock()
+            response.raise_for_status.return_value = None
+            response.status_code = 200
+            response.text = "ok"
+            response.json.side_effect = ValueError("not json")
+
+            with patch("notifications.telegram_notifier.requests.post", return_value=response):
+                self.assertFalse(notifier.send_message("hello"))
+
+    def test_telegram_notifier_fallback_ok_false_is_failure(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        with patch.multiple(
+            "notifications.telegram_notifier.Settings",
+            TELEGRAM_BROADCAST_CHANNELS=[],
+            TELEGRAM_RETRY_ATTEMPTS=1,
+        ):
+            notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="12345")
+            self.assertTrue(notifier.enabled)
+
+            failed_html = Mock()
+            failed_html.raise_for_status.side_effect = requests.HTTPError("400 Bad Request")
+            failed_html.status_code = 400
+            failed_html.text = "Bad Request: can't parse entities"
+
+            fallback_ok_false = Mock()
+            fallback_ok_false.raise_for_status.return_value = None
+            fallback_ok_false.status_code = 200
+            fallback_ok_false.text = '{"ok":false,"description":"Bad Request: chat not found"}'
+            fallback_ok_false.json.return_value = {
+                "ok": False,
+                "description": "Bad Request: chat not found",
+            }
+
+            with patch(
+                "notifications.telegram_notifier.requests.post",
+                side_effect=[failed_html, fallback_ok_false],
+            ):
+                self.assertFalse(notifier.send_message("<b>bad < text</b>", parse_mode="HTML"))
 
     def test_start_api_skips_boot_when_port_is_busy(self):
         from main import start_api
