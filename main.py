@@ -40,7 +40,6 @@ def _is_port_available(host: str, port: int) -> bool:
     """Return True when the requested host/port can be bound."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((host, port))
         return True
     except OSError:

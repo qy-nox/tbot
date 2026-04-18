@@ -57,8 +57,18 @@ class TelegramNotifier:
 
         channels = list(Settings.TELEGRAM_BROADCAST_CHANNELS)
         for channel in channels:
-            if channel not in selected:
-                selected.append(channel)
+            value = str(channel).strip()
+            if not value:
+                continue
+            if not is_valid_telegram_chat_id(value):
+                logger.error(
+                    "Invalid BROADCAST_TELEGRAM_CHANNELS entry=%r. "
+                    "Expected numeric chat id like 123456789 or -1001234567890.",
+                    value,
+                )
+                continue
+            if value not in selected:
+                selected.append(value)
 
         return selected
 
@@ -79,20 +89,44 @@ class TelegramNotifier:
                     payload = {
                         "chat_id": chat_id,
                         "text": text,
-                        "parse_mode": parse_mode,
                     }
+                    if parse_mode:
+                        payload["parse_mode"] = parse_mode
                     resp = requests.post(url, json=payload, timeout=10)
                     try:
                         resp.raise_for_status()
+                        data = resp.json() if resp.text else {}
+                        if isinstance(data, dict) and data.get("ok") is False:
+                            raise requests.HTTPError(
+                                f"Telegram API error: {data.get('description', 'unknown')}",
+                                response=resp,
+                            )
                         sent_any = True
                     except requests.HTTPError:
+                        # Telegram can return 400 when HTML entities are malformed.
+                        # Retry once without parse_mode for this chat only.
+                        failed_response = resp
+                        body = resp.text[:300]
+                        if parse_mode and "can't parse entities" in body.lower():
+                            fallback_payload = {
+                                "chat_id": chat_id,
+                                "text": text,
+                            }
+                            fallback_resp = requests.post(url, json=fallback_payload, timeout=10)
+                            try:
+                                fallback_resp.raise_for_status()
+                                sent_any = True
+                                continue
+                            except requests.HTTPError:
+                                failed_response = fallback_resp
+                                body = fallback_resp.text[:300]
                         logger.error(
                             "Telegram send failed for chat_id=%s (attempt %d/%d): status=%s body=%r",
                             chat_id,
                             attempt,
                             max_attempts,
-                            getattr(resp, "status_code", "n/a"),
-                            resp.text[:300],
+                            getattr(failed_response, "status_code", "n/a"),
+                            body,
                         )
                 if sent_any:
                     logger.info("Telegram message sent to %d chat(s)", len(self.chat_ids))
