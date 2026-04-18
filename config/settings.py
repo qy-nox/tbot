@@ -20,10 +20,31 @@ except ModuleNotFoundError:  # pragma: no cover - optional for bare runtime/test
 
     _load_dotenv = _no_op_load_dotenv
 
-# Load environment variables from .env file
-_load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+_ENV_FILE = BASE_DIR / ".env"
+
+# Load environment variables from .env file (force repository .env path)
+_load_dotenv(dotenv_path=_ENV_FILE, override=False)
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        warnings.warn(
+            f"Invalid integer for {key}={raw!r}; using fallback {default}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+
+
+def is_valid_telegram_token(token: str | None) -> bool:
+    """Return True when token follows Telegram '<id>:<secret>' shape."""
+    return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
 
 
 class Settings:
@@ -55,14 +76,14 @@ class Settings:
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_PORT: int = _env_int("SMTP_PORT", 587)
     SMTP_USER: str = os.getenv("SMTP_USER", "")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
 
     # ── Database ───────────────────────────────────────────────────────
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'trading_bot.db'}")
-    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "5"))
-    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+    DB_POOL_SIZE: int = _env_int("DB_POOL_SIZE", 5)
+    DB_MAX_OVERFLOW: int = _env_int("DB_MAX_OVERFLOW", 10)
 
     # ── Trading Mode ───────────────────────────────────────────────────
     TRADING_MODE: str = os.getenv("TRADING_MODE", "paper")  # paper | live
@@ -189,3 +210,28 @@ class Settings:
     LOG_FILE: str = "trading_bot.log"
     LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
     LOG_BACKUP_COUNT: int = 5
+    TELEGRAM_RETRY_ATTEMPTS: int = _env_int("TELEGRAM_RETRY_ATTEMPTS", 3)
+
+    @classmethod
+    def validate_startup_config(cls) -> list[str]:
+        """Return configuration errors that should block optional integrations."""
+        errors: list[str] = []
+        if cls.TELEGRAM_BOT_TOKEN and not is_valid_telegram_token(cls.TELEGRAM_BOT_TOKEN):
+            errors.append("TELEGRAM_BOT_TOKEN format is invalid (expected '<id>:<token>').")
+        if cls.TELEGRAM_CHAT_ID and not str(cls.TELEGRAM_CHAT_ID).strip():
+            errors.append("TELEGRAM_CHAT_ID is empty.")
+        if not cls.DATABASE_URL:
+            errors.append("DATABASE_URL is missing.")
+        return errors
+
+    @classmethod
+    def startup_snapshot(cls) -> dict[str, object]:
+        """Return non-sensitive startup configuration values for diagnostics."""
+        return {
+            "database_url": cls.DATABASE_URL,
+            "exchange_id": cls.EXCHANGE_ID,
+            "api_rate_limit_per_minute": cls.API_RATE_LIMIT_PER_MINUTE,
+            "scan_interval_seconds": cls.SCAN_INTERVAL_SECONDS,
+            "telegram_enabled": bool(cls.TELEGRAM_BOT_TOKEN and cls.TELEGRAM_CHAT_ID),
+            "finnhub_enabled": bool(cls.FINNHUB_API_KEY),
+        }

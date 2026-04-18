@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -107,8 +108,16 @@ def get_engine():
             "isolation_level": "SERIALIZABLE",
         }
         if Settings.DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
         _engine = create_engine(Settings.DATABASE_URL, **engine_kwargs)
+        if Settings.DATABASE_URL.startswith("sqlite"):
+            @event.listens_for(_engine, "connect")
+            def _sqlite_pragmas(dbapi_connection, connection_record):  # pragma: no cover - DB integration
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.close()
     return _engine
 
 

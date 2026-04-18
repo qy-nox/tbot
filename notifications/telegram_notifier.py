@@ -5,11 +5,12 @@ via the Telegram Bot API.
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import requests
 
-from config.settings import Settings
+from config.settings import Settings, is_valid_telegram_token
 
 logger = logging.getLogger("trading_bot.telegram_notifier")
 
@@ -26,10 +27,12 @@ class TelegramNotifier:
     ) -> None:
         self.token = token or Settings.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or Settings.TELEGRAM_CHAT_ID
-        self.api_url = self.BASE_URL.format(token=self.token)
-        self.enabled = bool(self.token and self.chat_id)
+        self.api_url = self.BASE_URL.format(token=self.token) if self.token else ""
+        self.enabled = bool(is_valid_telegram_token(self.token) and self.chat_id)
         if not self.enabled:
             logger.warning("Telegram notifier disabled – token or chat_id missing")
+        else:
+            logger.info("Telegram notifier initialised for chat_id=%s", self.chat_id)
 
     # ── Low-level send ──────────────────────────────────────────────────
 
@@ -45,14 +48,19 @@ class TelegramNotifier:
             "text": text,
             "parse_mode": parse_mode,
         }
-        try:
-            resp = requests.post(url, json=payload, timeout=10)
-            resp.raise_for_status()
-            logger.info("Telegram message sent")
-            return True
-        except requests.RequestException as exc:
-            logger.error("Telegram send failed: %s", exc)
-            return False
+        max_attempts = max(1, Settings.TELEGRAM_RETRY_ATTEMPTS)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                resp = requests.post(url, json=payload, timeout=10)
+                resp.raise_for_status()
+                logger.info("Telegram message sent")
+                return True
+            except requests.RequestException as exc:
+                logger.error("Telegram send failed (attempt %d/%d): %s", attempt, max_attempts, exc)
+                if attempt < max_attempts:
+                    # Linear backoff: 0.5s, 1.0s, 1.5s, ...
+                    time.sleep(0.5 * attempt)
+        return False
 
     # ── Signal alert ────────────────────────────────────────────────────
 
