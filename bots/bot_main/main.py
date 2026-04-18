@@ -7,11 +7,26 @@ import os
 import time
 from typing import Any
 
+from config.settings import Settings
+
+class _TelegramTimedOutFallback(Exception):
+    """Fallback timeout exception when telegram package is unavailable."""
+    pass
+
+
+class _TelegramNetworkErrorFallback(Exception):
+    """Fallback network exception when telegram package is unavailable."""
+    pass
+
+
 try:
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.error import NetworkError, TimedOut
     from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 except ModuleNotFoundError as exc:  # pragma: no cover - import-time fallback
     InlineKeyboardButton = InlineKeyboardMarkup = Update = Any
+    NetworkError = _TelegramNetworkErrorFallback
+    TimedOut = _TelegramTimedOutFallback
     Application = CallbackQueryHandler = CommandHandler = ContextTypes = Any
     _TELEGRAM_IMPORT_ERROR = exc
 else:
@@ -148,7 +163,27 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(bot.callback))
 
     logger.info("Starting main signal bot")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    max_attempts = max(1, Settings.TELEGRAM_RETRY_ATTEMPTS)
+    base_backoff = max(0.1, Settings.TELEGRAM_RETRY_BACKOFF_SECONDS)
+    max_backoff = max(base_backoff, Settings.TELEGRAM_RETRY_MAX_BACKOFF_SECONDS)
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            app.run_polling(allowed_updates=Update.ALL_TYPES)
+            return
+        except (TimedOut, NetworkError) as exc:
+            if attempt >= max_attempts:
+                logger.error("Main signal bot stopped after repeated Telegram timeouts: %s", exc)
+                raise
+            delay = min(base_backoff * (2 ** (attempt - 1)), max_backoff)
+            logger.warning(
+                "Telegram polling timeout/network error (attempt %d/%d): %s. Retrying in %.1fs",
+                attempt,
+                max_attempts,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

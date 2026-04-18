@@ -49,7 +49,10 @@ def verify_telegram_group_access(*, token: str, group_ids: list[str]) -> tuple[l
             resp = requests.get(
                 f"https://api.telegram.org/bot{token}/getChat",
                 params={"chat_id": group_id},
-                timeout=10,
+                timeout=(
+                    max(0.1, float(Settings.TELEGRAM_CONNECT_TIMEOUT_SECONDS)),
+                    max(0.1, float(Settings.TELEGRAM_READ_TIMEOUT_SECONDS)),
+                ),
             )
             payload = resp.json() if resp.text else {}
             if resp.status_code == 200 and isinstance(payload, dict) and payload.get("ok"):
@@ -184,6 +187,12 @@ class TradingBot:
         self.onchain = OnChainAnalyzer()
         self.sizer = PositionSizer()
         self.notifier = TelegramNotifier()
+        if self.notifier.enabled and Settings.TELEGRAM_STARTUP_VALIDATE_CONNECTIVITY:
+            if not self.notifier.test_connection():
+                logger.warning(
+                    "Telegram connectivity check failed on startup. "
+                    "Bot will continue and retry delivery with configured backoff."
+                )
         for error in Settings.validate_startup_config():
             logger.warning("Startup config warning: %s", error)
         configured_groups = Settings.configured_signal_group_ids()
@@ -624,8 +633,8 @@ def start_api() -> None:
 
     platform_init()
 
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
+    host = Settings.API_HOST
+    port = Settings.API_PORT
     if not _release_port_if_needed(host, port):
         logger.error(
             "Cannot start API server on %s:%d because the port is busy. "

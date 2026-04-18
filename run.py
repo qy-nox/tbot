@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from config.settings import is_valid_telegram_token
+from config.settings import Settings, is_valid_telegram_token
 
 # Configure logging (console + file)
 _log_file = Path(__file__).resolve().parent / "logs" / "runner.log"
@@ -168,15 +168,17 @@ class BotManager:
         logger.info("\n" + "=" * 70)
         logger.info("✅ ALL SERVICES STARTED SUCCESSFULLY!")
         logger.info("=" * 70)
+        api_host = Settings.API_HOST if Settings.API_HOST != "0.0.0.0" else "localhost"
+        api_port = Settings.API_PORT
         logger.info("\n📱 ACCESS YOUR SYSTEM:")
-        logger.info("  • Dashboard: http://localhost:8000/dashboard/")
-        logger.info("  • API Docs: http://localhost:8000/docs")
-        logger.info("  • API Health: http://localhost:8000/api/health")
+        logger.info(f"  • Dashboard: http://{api_host}:{api_port}/dashboard/")
+        logger.info(f"  • API Docs: http://{api_host}:{api_port}/docs")
+        logger.info(f"  • API Health: http://{api_host}:{api_port}/api/health")
         logger.info("\n🤖 TELEGRAM BOTS:")
         logger.info("  • Bot 1: @YourMainBotName (live signals)")
         logger.info("  • Bot 2: @YourSubBotName (subscriptions)")
         logger.info("\n🛠️ ADMIN:")
-        logger.info("  • Admin Website: http://localhost:8000/admin/")
+        logger.info(f"  • Admin Website: http://{api_host}:{api_port}/admin/")
         logger.info("\n💡 Press Ctrl+C to stop all services")
         logger.info("=" * 70 + "\n")
         
