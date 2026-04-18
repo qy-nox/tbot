@@ -16,6 +16,7 @@ logger = logging.getLogger("trading_bot.technical_analyzer")
 
 class TechnicalAnalyzer:
     """Calculate technical indicators on OHLCV DataFrames."""
+    REQUIRED_OHLCV_COLUMNS = ("open", "high", "low", "close", "volume")
 
     def __init__(self) -> None:
         self.cfg = Settings.INDICATORS
@@ -95,6 +96,7 @@ class TechnicalAnalyzer:
         high_close = (df["high"] - df["close"].shift()).abs()
         low_close = (df["low"] - df["close"].shift()).abs()
         true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        true_range = true_range.mask(~np.isfinite(true_range), np.nan)
         atr = true_range.rolling(window=period).mean()
         logger.debug("ATR(%d) computed", period)
         return atr
@@ -314,12 +316,70 @@ class TechnicalAnalyzer:
         )
         return {"bullish_ob": bullish_obs, "bearish_ob": bearish_obs}
 
+    def detect_adx_divergence(self, df: pd.DataFrame, adx: pd.Series | None = None, lookback: int = 5) -> bool:
+        """Detect weakening trend strength while price continues the trend."""
+        if len(df) < lookback + 1:
+            return False
+        adx_series = adx if adx is not None else self.compute_adx(df)
+        adx_tail = adx_series.tail(lookback).dropna()
+        if len(adx_tail) < 2:
+            return False
+        price_tail = df["close"].tail(lookback)
+        price_delta = price_tail.iloc[-1] - price_tail.iloc[0]
+        adx_delta = adx_tail.iloc[-1] - adx_tail.iloc[0]
+        price_trending = price_delta != 0
+        return bool(price_trending and adx_delta < 0)
+
+    def compute_ichimoku_cloud(self, df: pd.DataFrame) -> dict[str, pd.Series]:
+        """Compute Ichimoku cloud components."""
+        high_9 = df["high"].rolling(window=9).max()
+        low_9 = df["low"].rolling(window=9).min()
+        tenkan_sen = (high_9 + low_9) / 2
+
+        high_26 = df["high"].rolling(window=26).max()
+        low_26 = df["low"].rolling(window=26).min()
+        kijun_sen = (high_26 + low_26) / 2
+
+        senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(26)
+        high_52 = df["high"].rolling(window=52).max()
+        low_52 = df["low"].rolling(window=52).min()
+        senkou_span_b = ((high_52 + low_52) / 2).shift(26)
+        chikou_span = df["close"].shift(-26)
+
+        return {
+            "tenkan_sen": tenkan_sen,
+            "kijun_sen": kijun_sen,
+            "senkou_span_a": senkou_span_a,
+            "senkou_span_b": senkou_span_b,
+            "chikou_span": chikou_span,
+        }
+
+    def detect_price_anomaly(self, df: pd.DataFrame, z_threshold: float = 3.0) -> dict[str, float | bool]:
+        """Detect unusual price moves using rolling return z-score."""
+        returns = df["close"].pct_change()
+        if returns.dropna().empty:
+            return {"is_anomaly": False, "z_score": 0.0}
+        rolling_mean = returns.rolling(20).mean()
+        rolling_std = returns.rolling(20).std().replace(0, np.nan)
+        z_score = ((returns - rolling_mean) / rolling_std).iloc[-1]
+        z_score = float(z_score) if pd.notna(z_score) and np.isfinite(z_score) else 0.0
+        return {"is_anomaly": abs(z_score) >= z_threshold, "z_score": z_score}
+
+    @classmethod
+    def _validate_ohlcv_input(cls, df: pd.DataFrame) -> bool:
+        if df.empty:
+            return False
+        if any(col not in df.columns for col in cls.REQUIRED_OHLCV_COLUMNS):
+            return False
+        numeric = df.loc[:, cls.REQUIRED_OHLCV_COLUMNS].to_numpy()
+        return bool(np.isfinite(numeric).all())
+
     # ── All-in-one ─────────────────────────────────────────────────────
 
     def analyse(self, df: pd.DataFrame) -> dict:
         """Run the full indicator suite and return a summary dict."""
-        if df.empty:
-            logger.warning("Empty DataFrame – skipping analysis")
+        if not self._validate_ohlcv_input(df):
+            logger.warning("Invalid OHLCV DataFrame – skipping analysis")
             return {}
 
         rsi = self.compute_rsi(df)
@@ -332,7 +392,28 @@ class TechnicalAnalyzer:
         sr = self.compute_support_resistance(df)
         sd_zones = self.compute_supply_demand_zones(df)
         order_blocks = self.compute_order_blocks(df)
+        ichimoku = self.compute_ichimoku_cloud(df)
+        anomaly = self.detect_price_anomaly(df)
+        adx_divergence = self.detect_adx_divergence(df, adx=adx)
         trend = self.detect_trend(df)
+
+        confirmations = 0
+        rsi_last = rsi.iloc[-1] if (not rsi.empty and pd.notna(rsi.iloc[-1])) else None
+        if rsi_last is not None and (rsi_last <= self.cfg["rsi"]["oversold"] or rsi_last >= self.cfg["rsi"]["overbought"]):
+            confirmations += 1
+        macd_hist = macd.get("histogram")
+        has_valid_macd_hist = (
+            macd_hist is not None
+            and not macd_hist.empty
+            and pd.notna(macd_hist.iloc[-1])
+            and abs(float(macd_hist.iloc[-1])) > 0
+        )
+        if has_valid_macd_hist:
+            confirmations += 1
+        if pd.notna(adx.iloc[-1]) and adx.iloc[-1] >= self.cfg["adx"]["strong_trend"]:
+            confirmations += 1
+        if not anomaly["is_anomaly"]:
+            confirmations += 1
 
         result = {
             "rsi": float(rsi.iloc[-1]) if not rsi.empty and pd.notna(rsi.iloc[-1]) else None,
@@ -351,6 +432,10 @@ class TechnicalAnalyzer:
             "support_resistance": sr,
             "supply_demand_zones": sd_zones,
             "order_blocks": order_blocks,
+            "ichimoku": {k: v.iloc[-1] if not v.empty else None for k, v in ichimoku.items()},
+            "anomaly_detection": anomaly,
+            "adx_divergence": adx_divergence,
+            "signal_confidence": min(100, confirmations * 25),
             "trend": trend,
             "close": df["close"].iloc[-1],
         }
