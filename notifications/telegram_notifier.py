@@ -5,6 +5,7 @@ via the Telegram Bot API.
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -26,10 +27,16 @@ class TelegramNotifier:
     ) -> None:
         self.token = token or Settings.TELEGRAM_BOT_TOKEN
         self.chat_id = chat_id or Settings.TELEGRAM_CHAT_ID
-        self.api_url = self.BASE_URL.format(token=self.token)
-        self.enabled = bool(self.token and self.chat_id)
+        self.api_url = self.BASE_URL.format(token=self.token) if self.token else ""
+        self.enabled = bool(self._is_valid_token(self.token) and self.chat_id)
         if not self.enabled:
             logger.warning("Telegram notifier disabled – token or chat_id missing")
+        else:
+            logger.info("Telegram notifier initialised for chat_id=%s", self.chat_id)
+
+    @staticmethod
+    def _is_valid_token(token: str | None) -> bool:
+        return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
 
     # ── Low-level send ──────────────────────────────────────────────────
 
@@ -45,14 +52,17 @@ class TelegramNotifier:
             "text": text,
             "parse_mode": parse_mode,
         }
-        try:
-            resp = requests.post(url, json=payload, timeout=10)
-            resp.raise_for_status()
-            logger.info("Telegram message sent")
-            return True
-        except requests.RequestException as exc:
-            logger.error("Telegram send failed: %s", exc)
-            return False
+        for attempt in range(1, 4):
+            try:
+                resp = requests.post(url, json=payload, timeout=10)
+                resp.raise_for_status()
+                logger.info("Telegram message sent")
+                return True
+            except requests.RequestException as exc:
+                logger.error("Telegram send failed (attempt %d/3): %s", attempt, exc)
+                if attempt < 3:
+                    time.sleep(0.5 * attempt)
+        return False
 
     # ── Signal alert ────────────────────────────────────────────────────
 

@@ -15,10 +15,16 @@ import threading
 from pathlib import Path
 from typing import Any
 
-# Configure logging
+# Configure logging (console + file)
+_log_file = Path(__file__).resolve().parent / "logs" / "runner.log"
+_log_file.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(_log_file, encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -95,6 +101,26 @@ class BotManager:
                 return token
         return None
 
+    @staticmethod
+    def _validate_token_format(token: str | None) -> bool:
+        return bool(token and ":" in token and len(token.split(":", 1)[1]) >= 8)
+
+    @staticmethod
+    def _check_db_health() -> bool:
+        try:
+            from sqlalchemy import text
+            from utils.database import get_session, init_db
+            init_db()
+            db = get_session()
+            try:
+                db.execute(text("SELECT 1"))
+            finally:
+                db.close()
+            return True
+        except Exception as exc:
+            logger.error("❌ Database health check failed: %s", exc)
+            return False
+
     def _start_process(self, bot: dict[str, Any], index: int) -> subprocess.Popen:
         logger.info(f"\n[{index}/{len(self.bots)}] Starting: {bot['name']}")
         logger.info(f"    📝 {bot['description']}")
@@ -114,11 +140,18 @@ class BotManager:
         logger.info("🚀 TBOT ECOSYSTEM v2.0 - STARTING ALL SERVICES")
         logger.info("=" * 70)
         
+        if not self._check_db_health():
+            logger.error("❌ Startup aborted due to failing database health check")
+            sys.exit(1)
+
         for i, bot in enumerate(self.bots, 1):
             try:
                 token = self._get_bot_token(bot)
                 if token is None:
                     logger.warning(f"    ⏭️  Skipping {bot['name']} - no token configured")
+                    continue
+                if token != self.NO_TOKEN_REQUIRED and not self._validate_token_format(token):
+                    logger.warning(f"    ⏭️  Skipping {bot['name']} - invalid token format")
                     continue
 
                 process = self._start_process(bot, i)
@@ -178,7 +211,9 @@ class BotManager:
                         continue
 
                     logger.info(f"🔁 Restarting {bot_name} (attempt {restarts + 1}/{self.max_restarts})")
-                    time.sleep(2)
+                    backoff_seconds = min(2 ** (restarts + 1), 60)
+                    logger.info(f"    ⏱️ Backoff: waiting {backoff_seconds}s before restart")
+                    time.sleep(backoff_seconds)
                     restarted = subprocess.Popen(
                         process_info["bot"]["cmd"],
                         cwd=PROJECT_ROOT,

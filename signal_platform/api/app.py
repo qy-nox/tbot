@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from jwt import InvalidTokenError
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config.settings import Settings
@@ -156,10 +157,8 @@ async def _rate_limit_middleware(request: Request, call_next):
     auth_header = request.headers.get("authorization", "")
     identity = auth_header if auth_header.lower().startswith("bearer ") else None
     client_host = request.client.host if request.client and request.client.host else ""
-    if not client_host and not identity:
-        return JSONResponse(status_code=400, content={"detail": "Unable to determine client identity"})
     if not client_host:
-        client_host = "authenticated-client"
+        client_host = "authenticated-client" if identity else "anonymous-client"
     key = rate_limit_key_from_identity(
         client_host,
         identity,
@@ -484,4 +483,19 @@ def create_snapshot(
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "Trading Signal Platform", "version": "1.0.0"}
+    db_ok = False
+    try:
+        db = get_session()
+        try:
+            db.execute(text("SELECT 1"))
+            db_ok = True
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Health check DB probe failed")
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "service": "Trading Signal Platform",
+        "version": "1.0.0",
+        "database": "ok" if db_ok else "error",
+    }

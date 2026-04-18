@@ -118,6 +118,12 @@ def _quick_stats() -> dict:
         db.close()
 
 
+@router.get("/api/signals")
+def dashboard_signals_api():
+    """Dashboard polling endpoint with lightweight stats + recent signals."""
+    return _quick_stats()
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard_page():
     """Serve the main dashboard page."""
@@ -152,6 +158,8 @@ def dashboard_page():
              margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #21262d; }}
   .header h1 {{ font-size: 24px; color: #58a6ff; }}
   .header .updated {{ font-size: 12px; color: #8b949e; }}
+  .status {{ font-size: 12px; color: #8b949e; margin-top: 6px; }}
+  .status.error {{ color: #f85149; }}
   .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 16px; margin-bottom: 24px; }}
   .stat-card {{ background: #161b22; border: 1px solid #21262d; border-radius: 8px;
@@ -187,28 +195,31 @@ def dashboard_page():
 <body>
 <div class="header">
   <h1>📊 Trading Signal Dashboard</h1>
-  <span class="updated">Last updated: {stats['updated']}</span>
+  <div>
+    <div class="updated">Last updated: <span id="lastUpdated">{stats['updated']}</span></div>
+    <div class="status" id="refreshStatus">Auto-refresh: every 5s</div>
+  </div>
 </div>
 
 <div class="stats">
   <div class="stat-card">
-    <div class="value">{stats['total_signals']}</div>
+    <div class="value" id="totalSignals">{stats['total_signals']}</div>
     <div class="label">Total Signals</div>
   </div>
   <div class="stat-card">
-    <div class="value">{stats['crypto_signals']}</div>
+    <div class="value" id="cryptoSignals">{stats['crypto_signals']}</div>
     <div class="label">Crypto Signals</div>
   </div>
   <div class="stat-card">
-    <div class="value">{stats['binary_signals']}</div>
+    <div class="value" id="binarySignals">{stats['binary_signals']}</div>
     <div class="label">Binary Signals</div>
   </div>
   <div class="stat-card win-rate">
-    <div class="value">{stats['win_rate']}%</div>
-    <div class="label">Win Rate ({stats['won']}W / {stats['lost']}L)</div>
+    <div class="value" id="winRate">{stats['win_rate']}%</div>
+    <div class="label" id="winRateLabel">Win Rate ({stats['won']}W / {stats['lost']}L)</div>
   </div>
   <div class="stat-card">
-    <div class="value">{stats['total_users']}</div>
+    <div class="value" id="totalUsers">{stats['total_users']}</div>
     <div class="label">Active Users</div>
   </div>
 </div>
@@ -229,7 +240,7 @@ def dashboard_page():
         <th>Entry</th><th>Confidence</th><th>Grade</th><th>Outcome</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="recentSignalsBody">
       {recent_rows if recent_rows else '<tr><td colspan="8" style="text-align:center;color:#8b949e;">No signals yet</td></tr>'}
     </tbody>
   </table>
@@ -238,32 +249,92 @@ def dashboard_page():
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 const ctx = document.getElementById('outcomesChart');
+let outcomesChart = null;
 if (window.Chart) {{
-  new Chart(ctx, {{
-    type: 'doughnut',
-    data: {{
-      labels: ['Wins', 'Losses'],
-      datasets: [{{
-        data: [{stats['won']}, {stats['lost']}],
-        backgroundColor: ['#3fb950', '#f85149'],
-        borderWidth: 0
-      }}]
-    }},
-    options: {{
-      responsive: true,
-      plugins: {{
-        legend: {{
-          labels: {{
-            color: '#c9d1d9'
+  outcomesChart = new Chart(ctx, {{
+      type: 'doughnut',
+      data: {{
+        labels: ['Wins', 'Losses'],
+        datasets: [{{
+          data: [{stats['won']}, {stats['lost']}],
+          backgroundColor: ['#3fb950', '#f85149'],
+          borderWidth: 0
+        }}]
+      }},
+      options: {{
+        responsive: true,
+        plugins: {{
+          legend: {{
+            labels: {{
+              color: '#c9d1d9'
+            }}
           }}
         }}
       }}
-    }}
-  }});
+    }});
 }}
 
-// Auto-refresh every 60 seconds
-setTimeout(function(){{ location.reload(); }}, 60000);
+function renderSignals(rows) {{
+  const tbody = document.getElementById('recentSignalsBody');
+  if (!tbody) return;
+  if (!rows || !rows.length) {{
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8b949e;">No signals yet</td></tr>';
+    return;
+  }}
+  tbody.innerHTML = rows.map((s) => {{
+    const outcome = String(s.outcome || 'pending');
+    const outcomeCls = outcome.includes('tp') ? 'win' : (outcome === 'sl_hit' ? 'loss' : 'pending');
+    const direction = String(s.direction || '');
+    const directionEmoji = (direction === 'BUY' || direction === 'CALL') ? '🟢' : ((direction === 'SELL' || direction === 'PUT') ? '🔴' : '⚪');
+    const entry = Number(s.entry || 0).toLocaleString(undefined, {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+    const confidence = Math.round(Number(s.confidence || 0) * 100);
+    const grade = s.grade || '-';
+    const type = String(s.type || 'crypto');
+    return `<tr class="${{outcomeCls}}">
+      <td>${{s.time || ''}}</td>
+      <td><span class="badge badge-${{type === 'crypto' ? 'crypto' : 'binary'}}">${{type.toUpperCase()}}</span></td>
+      <td><strong>${{s.pair || ''}}</strong></td>
+      <td>${{directionEmoji}} ${{direction}}</td>
+      <td>${{entry}}</td>
+      <td>${{confidence}}%</td>
+      <td><span class="grade">${{grade}}</span></td>
+      <td><span class="outcome outcome-${{outcomeCls}}">${{outcome.replaceAll('_', ' ').toUpperCase()}}</span></td>
+    </tr>`;
+  }}).join('');
+}}
+
+async function refreshDashboard() {{
+  const status = document.getElementById('refreshStatus');
+  try {{
+    if (status) {{
+      status.textContent = 'Refreshing...';
+      status.classList.remove('error');
+    }}
+    const response = await fetch('/dashboard/api/signals', {{ cache: 'no-store' }});
+    if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
+    const data = await response.json();
+    document.getElementById('lastUpdated').textContent = data.updated || '-';
+    document.getElementById('totalSignals').textContent = data.total_signals ?? 0;
+    document.getElementById('cryptoSignals').textContent = data.crypto_signals ?? 0;
+    document.getElementById('binarySignals').textContent = data.binary_signals ?? 0;
+    document.getElementById('totalUsers').textContent = data.total_users ?? 0;
+    document.getElementById('winRate').textContent = `${{data.win_rate ?? 0}}%`;
+    document.getElementById('winRateLabel').textContent = `Win Rate (${{data.won ?? 0}}W / ${{data.lost ?? 0}}L)`;
+    renderSignals(data.recent || []);
+    if (outcomesChart && outcomesChart.data && outcomesChart.data.datasets && outcomesChart.data.datasets[0]) {{
+      outcomesChart.data.datasets[0].data = [data.won ?? 0, data.lost ?? 0];
+      outcomesChart.update();
+    }}
+    if (status) status.textContent = 'Auto-refresh: every 5s';
+  }} catch (error) {{
+    if (status) {{
+      status.textContent = `Refresh failed: ${{error.message}}`;
+      status.classList.add('error');
+    }}
+  }}
+}}
+
+setInterval(refreshDashboard, 5000);
 </script>
 </body>
 </html>"""

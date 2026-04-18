@@ -21,7 +21,7 @@ from core.technical_analyzer import TechnicalAnalyzer
 from core.sentiment_analyzer import SentimentAnalyzer
 from core.multi_timeframe import MultiTimeframeAnalyzer
 from core.onchain_analyzer import OnChainAnalyzer
-from strategies.strategy_engine import StrategyEngine
+from strategies.strategy_engine import Signal, StrategyEngine
 from strategies.binary_strategy import BinaryStrategyEngine
 from risk_management.position_sizer import PositionSizer
 from notifications.telegram_notifier import TelegramNotifier
@@ -47,6 +47,9 @@ class TradingBot:
         self.onchain = OnChainAnalyzer()
         self.sizer = PositionSizer()
         self.notifier = TelegramNotifier()
+        for error in Settings.validate_startup_config():
+            logger.warning("Startup config warning: %s", error)
+        logger.info("Startup config: %s", Settings.startup_snapshot())
 
         # ML engine (lazy-loaded to avoid import errors if deps missing)
         self.ml_engine = None
@@ -81,7 +84,9 @@ class TradingBot:
         # 2. Technical analysis
         analysis = self.analyzer.analyse(df)
         if not analysis:
+            logger.warning("%s: technical analysis returned no result", pair)
             return
+        logger.debug("%s: analysis keys=%s", pair, sorted(analysis.keys()))
 
         # 3. Multi-timeframe analysis (best-effort)
         mtf_result = None
@@ -130,8 +135,11 @@ class TradingBot:
             atr=analysis.get("atr"),
         )
         if signal is None:
-            logger.info("%s: no signal", pair)
-            return
+            signal = self._fallback_signal(pair, analysis)
+            if signal is None:
+                logger.info("%s: no signal", pair)
+                return
+            logger.info("%s: fallback signal generated", pair)
 
         # Apply MTF alignment boost
         if mtf_result and mtf_result.alignment == "ALIGNED":
@@ -159,7 +167,9 @@ class TradingBot:
         self._store_signal(signal)
 
         # 10. Send Telegram notification
-        self.notifier.send_signal(signal)
+        sent_ok = self.notifier.send_signal(signal)
+        if not sent_ok:
+            logger.warning("%s: telegram notification failed", pair)
 
         # 11. Store in platform & distribute to subscribers
         self._platform_distribute(signal, analysis)
@@ -170,6 +180,55 @@ class TradingBot:
             pair,
             signal.entry_price,
             signal.confidence * 100,
+        )
+
+    @staticmethod
+    def _fallback_signal(pair: str, analysis: dict) -> Signal | None:
+        """Generate a conservative fallback signal when consensus returns none."""
+        trend = analysis.get("trend")
+        close = analysis.get("close")
+        atr = analysis.get("atr") or 0.0
+        ema_fast = analysis.get("ema_fast")
+        ema_medium = analysis.get("ema_medium")
+
+        if trend not in {"UPTREND", "DOWNTREND"} or close is None:
+            return None
+        if ema_fast is None or ema_medium is None:
+            return None
+
+        direction = None
+        if trend == "UPTREND" and ema_fast >= ema_medium:
+            direction = "BUY"
+        elif trend == "DOWNTREND" and ema_fast <= ema_medium:
+            direction = "SELL"
+        if direction is None:
+            return None
+
+        sl_distance = max(float(atr) * Settings.STOP_LOSS_ATR_MULTIPLIER, float(close) * 0.002)
+        if direction == "BUY":
+            stop_loss = close - sl_distance
+            take_profit_1 = close + sl_distance * Settings.TAKE_PROFIT_LEVELS[0]
+            take_profit_2 = close + sl_distance * Settings.TAKE_PROFIT_LEVELS[1]
+            take_profit_3 = close + sl_distance * Settings.TAKE_PROFIT_LEVELS[2]
+        else:
+            stop_loss = close + sl_distance
+            take_profit_1 = close - sl_distance * Settings.TAKE_PROFIT_LEVELS[0]
+            take_profit_2 = close - sl_distance * Settings.TAKE_PROFIT_LEVELS[1]
+            take_profit_3 = close - sl_distance * Settings.TAKE_PROFIT_LEVELS[2]
+
+        return Signal(
+            timestamp=datetime.now(timezone.utc),
+            pair=pair,
+            direction=direction,
+            entry_price=float(close),
+            stop_loss=round(float(stop_loss), 8),
+            take_profit_1=round(float(take_profit_1), 8),
+            take_profit_2=round(float(take_profit_2), 8),
+            take_profit_3=round(float(take_profit_3), 8),
+            confidence=max(0.55, Settings.MIN_SIGNAL_CONFIDENCE),
+            trend=trend,
+            reasons=["Fallback trend signal"],
+            strategy_name="fallback_trend",
         )
 
     # ── Binary signal scan ──────────────────────────────────────────────
@@ -404,12 +463,8 @@ def start_api() -> None:
     import uvicorn
     from signal_platform.models import init_db as platform_init
     from signal_platform.api.app import app
-    from signal_platform.dashboard import router as dashboard_router
 
     platform_init()
-
-    # Mount the dashboard
-    app.include_router(dashboard_router)
 
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
