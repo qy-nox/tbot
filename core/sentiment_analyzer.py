@@ -16,6 +16,9 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from config.settings import Settings
 
 logger = logging.getLogger("trading_bot.sentiment_analyzer")
+NEWSAPI_MAX_RETRY_DELAY_SECONDS = 15.0
+CONFLICT_SCALE_FACTOR = 0.25
+MAX_CONFLICT_PENALTY = 0.35
 
 
 @dataclass
@@ -35,19 +38,21 @@ class SentimentAnalyzer:
     """Analyse sentiment of news headlines using TextBlob + VADER."""
 
     def __init__(self, vader_weight: float = 0.6, textblob_weight: float = 0.4):
-        self.vader = SentimentIntensityAnalyzer()
         total_weight = vader_weight + textblob_weight
         if total_weight <= 0:
+            logger.warning("Invalid sentiment model weights; falling back to defaults")
             vader_weight, textblob_weight = 0.6, 0.4
-        self.vader_weight = vader_weight
-        self.textblob_weight = textblob_weight
+            total_weight = vader_weight + textblob_weight
+        self.vader = SentimentIntensityAnalyzer()
+        self.vader_weight = vader_weight / total_weight
+        self.textblob_weight = textblob_weight / total_weight
         self.newsapi_key = Settings.NEWSAPI_KEY
         self._news_cache: dict[str, tuple[float, list[dict]]] = {}
         self._cache_lock = threading.Lock()
         logger.info(
             "SentimentAnalyzer ready (VADER=%.0f%%, TextBlob=%.0f%%)",
-            vader_weight * 100,
-            textblob_weight * 100,
+            self.vader_weight * 100,
+            self.textblob_weight * 100,
         )
 
     # ── Single headline ─────────────────────────────────────────────────
@@ -216,7 +221,10 @@ class SentimentAnalyzer:
                 if attempt >= Settings.EXCHANGE_RETRY_ATTEMPTS:
                     logger.warning("NewsAPI fetch failed: %s", exc)
                     return []
-                delay = min(Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), 15.0)
+                delay = min(
+                    Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)),
+                    NEWSAPI_MAX_RETRY_DELAY_SECONDS,
+                )
                 time.sleep(delay)
         return []
 
@@ -237,10 +245,12 @@ class SentimentAnalyzer:
 
     @staticmethod
     def _conflict_penalty(source_scores: list[float]) -> float:
+        if not source_scores:
+            return 0.0
         if len(source_scores) <= 1:
             return 0.0
         dispersion = statistics.pstdev(source_scores)
-        return max(0.0, min(dispersion * 0.25, 0.35))
+        return max(0.0, min(dispersion * CONFLICT_SCALE_FACTOR, MAX_CONFLICT_PENALTY))
 
     # ── Helpers ─────────────────────────────────────────────────────────
 

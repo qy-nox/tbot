@@ -37,6 +37,19 @@ class CoreEnhancementsTests(unittest.TestCase):
         result = fetcher.fetch_ohlcv("BTC/USDT", timeframe="1m", limit=2)
         self.assertTrue(result.empty)
 
+    def test_data_fetcher_rejects_nonfinite_and_inverted_candles(self):
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        nan_rows = [
+            [now_ms, 100, 102, 99, 101, 10],
+            [now_ms + 60_000, 101, 103, 100, float("nan"), 8],
+        ]
+        inverted_rows = [
+            [now_ms, 100, 102, 99, 101, 10],
+            [now_ms + 60_000, 101, 98, 100, 101, 8],
+        ]
+        self.assertTrue(_TestFetcher(nan_rows).fetch_ohlcv("BTC/USDT", timeframe="1m", limit=2).empty)
+        self.assertTrue(_TestFetcher(inverted_rows).fetch_ohlcv("BTC/USDT", timeframe="1m", limit=2).empty)
+
     def test_technical_analysis_adds_new_safety_outputs(self):
         base = {
             "open": [100 + i for i in range(90)],
@@ -58,7 +71,7 @@ class CoreEnhancementsTests(unittest.TestCase):
         mock_get.return_value.json.return_value = {
             "articles": [
                 {"title": "Bitcoin rallies as demand rises"},
-                {"headline": "Market turns bearish after macro pressure"},
+                {"title": "Market turns bearish after macro pressure"},
             ]
         }
 

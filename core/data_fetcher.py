@@ -7,6 +7,7 @@ funding rates, and volume profiles from various sources.
 import logging
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
@@ -20,6 +21,10 @@ from core.security import ensure_valid_pair
 from utils.validators import validate_required_columns
 
 logger = logging.getLogger("trading_bot.data_fetcher")
+RATE_LIMIT_TIMING_BUFFER_SECONDS = 0.01
+RATE_LIMIT_WINDOW_SECONDS = 60
+DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 3
+DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS = 30
 
 
 class DataFetcher:
@@ -31,7 +36,7 @@ class DataFetcher:
         self._ohlcv_cache: dict[tuple[str, str, int], tuple[float, pd.DataFrame]] = {}
         self._http_cache: dict[str, tuple[float, Any]] = {}
         self._cache_lock = threading.Lock()
-        self._request_times: list[float] = []
+        self._request_times: deque[float] = deque()
         self._circuit_failure_count = 0
         self._circuit_open_until = 0.0
 
@@ -351,15 +356,16 @@ class DataFetcher:
 
     def _respect_rate_limit(self) -> None:
         max_per_minute = max(1, int(Settings.API_RATE_LIMIT_PER_MINUTE))
-        now = time.time()
-        with self._cache_lock:
-            self._request_times = [t for t in self._request_times if now - t < 60]
-            if len(self._request_times) >= max_per_minute:
-                sleep_for = max(0.0, 60 - (now - self._request_times[0])) + 0.01
-                time.sleep(sleep_for)
-                now = time.time()
-                self._request_times = [t for t in self._request_times if now - t < 60]
-            self._request_times.append(now)
+        while True:
+            now = time.time()
+            with self._cache_lock:
+                while self._request_times and (now - self._request_times[0]) >= RATE_LIMIT_WINDOW_SECONDS:
+                    self._request_times.popleft()
+                if len(self._request_times) < max_per_minute:
+                    self._request_times.append(float(now))
+                    return
+                sleep_for = max(0.0, RATE_LIMIT_WINDOW_SECONDS - (now - self._request_times[0])) + RATE_LIMIT_TIMING_BUFFER_SECONDS
+            time.sleep(sleep_for)
 
     def _is_circuit_open(self) -> bool:
         return time.time() < self._circuit_open_until
@@ -370,9 +376,15 @@ class DataFetcher:
 
     def _record_circuit_failure(self) -> None:
         self._circuit_failure_count += 1
-        threshold = max(1, int(getattr(Settings, "CIRCUIT_BREAKER_FAILURE_THRESHOLD", 3)))
+        threshold = max(
+            1,
+            int(getattr(Settings, "CIRCUIT_BREAKER_FAILURE_THRESHOLD", DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD)),
+        )
         if self._circuit_failure_count >= threshold:
-            cooldown = max(1, int(getattr(Settings, "CIRCUIT_BREAKER_COOLDOWN_SECONDS", 30)))
+            cooldown = max(
+                1,
+                int(getattr(Settings, "CIRCUIT_BREAKER_COOLDOWN_SECONDS", DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS)),
+            )
             self._circuit_open_until = time.time() + cooldown
 
     @staticmethod
@@ -385,7 +397,7 @@ class DataFetcher:
         numeric = df.loc[:, required]
         if not np.isfinite(numeric.to_numpy()).all():
             return False
-        if (numeric[["open", "high", "low", "close"]] <= 0).any().any():
+        if (numeric[["open", "high", "low", "close"]] < 0).values.any():
             return False
         if (numeric["volume"] < 0).any():
             return False

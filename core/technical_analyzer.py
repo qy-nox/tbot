@@ -95,7 +95,7 @@ class TechnicalAnalyzer:
         high_low = df["high"] - df["low"]
         high_close = (df["high"] - df["close"].shift()).abs()
         low_close = (df["low"] - df["close"].shift()).abs()
-        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1).clip(lower=0)
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         true_range = true_range.mask(~np.isfinite(true_range), np.nan)
         atr = true_range.rolling(window=period).mean()
         logger.debug("ATR(%d) computed", period)
@@ -327,7 +327,8 @@ class TechnicalAnalyzer:
         price_tail = df["close"].tail(lookback)
         price_delta = price_tail.iloc[-1] - price_tail.iloc[0]
         adx_delta = adx_tail.iloc[-1] - adx_tail.iloc[0]
-        return bool(price_delta != 0 and adx_delta < 0)
+        price_trending = price_delta != 0
+        return bool(price_trending and adx_delta < 0)
 
     def compute_ichimoku_cloud(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         """Compute Ichimoku cloud components."""
@@ -397,11 +398,19 @@ class TechnicalAnalyzer:
         trend = self.detect_trend(df)
 
         confirmations = 0
-        if rsi.iloc[-1] <= self.cfg["rsi"]["oversold"] or rsi.iloc[-1] >= self.cfg["rsi"]["overbought"]:
+        rsi_last = rsi.iloc[-1] if (not rsi.empty and pd.notna(rsi.iloc[-1])) else None
+        if rsi_last is not None and (rsi_last <= self.cfg["rsi"]["oversold"] or rsi_last >= self.cfg["rsi"]["overbought"]):
             confirmations += 1
-        if abs(float(macd["histogram"].iloc[-1])) > 0:
+        macd_hist = macd.get("histogram")
+        has_valid_macd_hist = (
+            macd_hist is not None
+            and not macd_hist.empty
+            and pd.notna(macd_hist.iloc[-1])
+            and abs(float(macd_hist.iloc[-1])) > 0
+        )
+        if has_valid_macd_hist:
             confirmations += 1
-        if adx.iloc[-1] is not None and pd.notna(adx.iloc[-1]) and adx.iloc[-1] >= self.cfg["adx"]["strong_trend"]:
+        if pd.notna(adx.iloc[-1]) and adx.iloc[-1] >= self.cfg["adx"]["strong_trend"]:
             confirmations += 1
         if not anomaly["is_anomaly"]:
             confirmations += 1
