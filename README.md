@@ -138,6 +138,75 @@ A longer checklist is in `TROUBLESHOOTING.md`, including database lock handling,
 
 Following this checklist before every release helps keep signal quality, payment integrity, and user trust stable over time.
 
+## RHIC – Risk/High-Impact Calendar Blackout
+
+The RHIC (Risk/High-Impact Calendar) feature automatically suppresses new trading signals
+during the minutes surrounding a scheduled high-impact economic event (e.g. FOMC, NFP, CPI).
+This avoids entering positions into highly volatile, low-predictability windows.
+
+### How it works
+
+1. `core/economic_calendar.py` – fetches upcoming events from the Finnhub economic calendar API.
+2. `strategies/strategy_engine.py` – checks `EconomicCalendar.is_high_impact_window()` inside
+   `_apply_filters()` before emitting any BUY/SELL signal.
+3. If a high-impact event is within `HIGH_IMPACT_SKIP_MINUTES` (default 30 min), the signal
+   is suppressed and a log entry is emitted.
+
+### Key environment variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `CALENDAR_ENABLED` | Enable/disable the RHIC blackout feature | `True` |
+| `HIGH_IMPACT_SKIP_MINUTES` | Minutes to block before/after a high-impact event | `30` |
+| `FINNHUB_API_KEY` / `FINNHUB_TOKEN` | Finnhub API key for economic calendar data | _(empty)_ |
+
+When `FINNHUB_API_KEY` is empty, the calendar fetch is silently skipped and signals are
+not suppressed (fail-open behaviour).
+
+## New Core Modules (v2)
+
+| Module | Location | Purpose |
+|---|---|---|
+| Economic Calendar | `core/economic_calendar.py` | RHIC blackout + Finnhub event feed |
+| SMC Analyzer | `core/smc_analyzer.py` | Smart Money Concepts (OB, BOS, CHoCH, FVG) |
+| Fibonacci | `core/fibonacci.py` | Dedicated Fibonacci retracement / extension levels |
+
+## Running the Bot
+
+```bash
+# Copy environment template
+cp .env.example .env
+# Edit .env with your credentials (exchange keys, Telegram tokens, Finnhub key, etc.)
+
+# Install dependencies (see requirements.txt for optional heavy deps)
+pip install -r requirements.txt
+
+# Run the trading signal scanner
+python main.py
+
+# Run the REST API server only
+python main.py --api
+
+# Run both scanner and API server
+python main.py --both
+
+# Run all tests
+python -m pytest tests/ -v
+```
+
+### Minimum required environment variables
+
+```dotenv
+TELEGRAM_BOT_TOKEN=your_bot_token          # from @BotFather
+TELEGRAM_CHAT_ID=your_chat_id             # numeric chat/group id
+BINANCE_API_KEY=your_binance_api_key      # ccxt exchange key
+BINANCE_API_SECRET=your_binance_api_secret
+DATABASE_URL=sqlite:///trading_bot.db     # SQLAlchemy URL
+FINNHUB_API_KEY=your_finnhub_key          # for news + economic calendar (optional)
+```
+
+See `.env.example` for the full list of supported variables.
+
 ## Closing Notes
 
 This repository now provides both legacy-compatible modules and standardized production-style ecosystem paths. The implementation is intentionally incremental so existing users are not disrupted, while new automation and deployment scripts can target the expanded structure immediately. Continue evolving strategy logic, payment adapters, and analytics depth as operational data accumulates.

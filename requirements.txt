@@ -2,11 +2,13 @@
 pandas>=2.2.0
 numpy>=1.24.0
 ccxt>=4.1.0
-ta-lib>=0.4.28
+# ta-lib is optional: install the C library first, then: pip install ta-lib
+# ta-lib>=0.4.28
 pandas-ta>=0.3.14b0
 
 # ML & Data Science
-torch>=2.0.0
+# torch and heavy ML libraries are optional – comment out if not needed
+# torch>=2.0.0
 scikit-learn>=1.6.0
 lightgbm>=4.6.0
 xgboost>=2.0.0
@@ -16,21 +18,24 @@ statsmodels>=0.14.0
 requests>=2.31.0
 aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
-selenium>=4.15.0
+# selenium is optional for scraping; comment out if not needed
+# selenium>=4.15.0
 yfinance>=0.2.32
-alpha_vantage>=2.3.1
-finnhub-python>=1.4.0
-tweepy>=4.14.0
+# alpha_vantage>=2.3.1
+finnhub-python>=2.4.19
+# tweepy>=4.14.0
 
 # NLP & Sentiment
 textblob>=0.17.1
 vaderSentiment>=3.3.2
-transformers>=4.35.0
+# transformers is large and optional
+# transformers>=4.35.0
 
 # Database
 SQLAlchemy>=2.0.23
 psycopg2-binary>=2.9.9
-redis>=6.4.0
+# redis is optional for caching
+redis>=5.0.0
 alembic>=1.12.0
 
 # Web Framework
@@ -38,14 +43,15 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
+email-validator>=2.2.0
+httpx>=0.24.0
 
 # Telegram
 python-telegram-bot>=20.7
 
 # Security & Auth
 passlib>=1.7.4
-cryptography>=46.0.5
-email-validator>=2.2.0
+cryptography>=43.0.0
 python-jose[cryptography]>=3.3.0
 
 # Testing
@@ -56,7 +62,7 @@ pytest-mock>=3.12.0
 coverage>=7.3.0
 
 # Monitoring & Logging
-python-dotenv>=1.0.1
+python-dotenv>=1.0.0
 loguru>=0.7.2
 prometheus-client>=0.19.0
 

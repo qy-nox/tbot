@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from config.settings import Settings
 from core.technical_analyzer import TechnicalAnalyzer
 from core.sentiment_analyzer import SentimentAnalyzer, SentimentResult
+from core.economic_calendar import EconomicCalendar
 
 logger = logging.getLogger("trading_bot.strategy_engine")
 
@@ -41,6 +42,10 @@ class StrategyEngine:
         self.sentiment = SentimentAnalyzer()
         self.cfg = Settings.INDICATORS
         self.filters = Settings.FILTERS
+        self.calendar = EconomicCalendar(
+            finnhub_key=Settings.FINNHUB_API_KEY,
+            skip_minutes=Settings.HIGH_IMPACT_SKIP_MINUTES,
+        )
 
     # ── Main evaluate ───────────────────────────────────────────────────
 
@@ -210,6 +215,17 @@ class StrategyEngine:
         self, analysis: dict, sentiment: SentimentResult | None
     ) -> bool:
         f = self.filters
+
+        # RHIC: High-Impact Calendar blackout
+        if Settings.CALENDAR_ENABLED:
+            try:
+                if self.calendar.is_high_impact_window():
+                    logger.info(
+                        "RHIC blackout active – skipping signal during high-impact news window"
+                    )
+                    return False
+            except Exception:
+                logger.warning("RHIC calendar check failed (non-fatal)", exc_info=True)
 
         # Trend filter
         if f.get("trend_filter"):
