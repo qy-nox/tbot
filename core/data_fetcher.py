@@ -11,7 +11,13 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 
-import ccxt
+try:
+    import ccxt
+    _CCXT_AVAILABLE = True
+except ImportError:  # pragma: no cover - ccxt is optional
+    ccxt = None  # type: ignore[assignment]
+    _CCXT_AVAILABLE = False
+
 import numpy as np
 import pandas as pd
 import requests
@@ -42,12 +48,24 @@ class DataFetcher:
 
     # ── Exchange Initialisation ────────────────────────────────────────
 
-    def _init_exchange(self) -> ccxt.Exchange:
-        """Initialise the CCXT exchange instance."""
+    def _init_exchange(self):
+        """Initialise the CCXT exchange instance.
+
+        Returns ``None`` (and logs a warning) when the ``ccxt`` package
+        is not installed, so the bot can still start in environments where
+        ccxt is absent (e.g. test runners without the full dependency set).
+        """
+        if not _CCXT_AVAILABLE:
+            logger.warning(
+                "ccxt is not installed – exchange connectivity unavailable. "
+                "Install ccxt to enable live market data."
+            )
+            return None
+
         exchange_class = getattr(ccxt, Settings.EXCHANGE_ID, None)
         if exchange_class is None:
             logger.error("Exchange '%s' not found in CCXT", Settings.EXCHANGE_ID)
-            raise ValueError(f"Unsupported exchange: {Settings.EXCHANGE_ID}")
+            return None
 
         exchange = exchange_class(
             {
@@ -69,6 +87,9 @@ class DataFetcher:
         limit: int | None = None,
     ) -> pd.DataFrame:
         """Fetch OHLCV candle data and return a DataFrame."""
+        if self.exchange is None:
+            logger.warning("Exchange not available; cannot fetch OHLCV for %s", symbol)
+            return pd.DataFrame()
         symbol = ensure_valid_pair(symbol)
         if self._is_circuit_open():
             logger.warning("Circuit breaker open; skipping OHLCV fetch for %s", symbol)
@@ -81,6 +102,13 @@ class DataFetcher:
             now = time.time()
             if cached and now - cached[0] <= Settings.OHLCV_CACHE_TTL_SECONDS:
                 return cached[1].copy()
+
+        # Build tuple of transient CCXT exceptions to retry on (guards against missing ccxt)
+        _transient_exc: tuple[type[Exception], ...] = (OSError,)
+        _base_exc: tuple[type[Exception], ...] = (Exception,)
+        if _CCXT_AVAILABLE:
+            _transient_exc = (ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.RequestTimeout)
+            _base_exc = (ccxt.BaseError,)
 
         for attempt in range(1, Settings.EXCHANGE_RETRY_ATTEMPTS + 1):
             try:
@@ -108,7 +136,7 @@ class DataFetcher:
                 self._record_circuit_success()
                 logger.info("Fetched %d candles for %s (%s)", len(df), symbol, timeframe)
                 return df
-            except (ccxt.RateLimitExceeded, ccxt.NetworkError, ccxt.RequestTimeout) as exc:
+            except _transient_exc as exc:
                 self._record_circuit_failure()
                 if attempt >= Settings.EXCHANGE_RETRY_ATTEMPTS:
                     logger.error("Transient exchange error fetching OHLCV for %s: %s", symbol, exc)
@@ -116,7 +144,7 @@ class DataFetcher:
                 delay = min(Settings.EXCHANGE_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)), 30.0)
                 logger.warning("Retrying OHLCV fetch for %s in %.2fs (%s)", symbol, delay, exc)
                 time.sleep(delay)
-            except ccxt.BaseError as exc:
+            except _base_exc as exc:
                 self._record_circuit_failure()
                 logger.error("CCXT error fetching OHLCV for %s: %s", symbol, exc)
                 return pd.DataFrame()
@@ -150,11 +178,14 @@ class DataFetcher:
 
     def fetch_ticker(self, symbol: str) -> dict[str, Any]:
         """Return the latest ticker for *symbol*."""
+        if self.exchange is None:
+            logger.warning("Exchange not available; cannot fetch ticker for %s", symbol)
+            return {}
         try:
             ticker = self.exchange.fetch_ticker(symbol)
             logger.debug("Ticker %s: last=%.2f", symbol, ticker.get("last", 0))
             return ticker
-        except ccxt.BaseError as exc:
+        except Exception as exc:
             logger.error("Error fetching ticker for %s: %s", symbol, exc)
             return {}
 
@@ -179,13 +210,15 @@ class DataFetcher:
 
     def fetch_funding_rate(self, symbol: str) -> float | None:
         """Fetch the current funding rate (futures exchanges only)."""
+        if self.exchange is None:
+            return None
         try:
             if hasattr(self.exchange, "fetch_funding_rate"):
                 data = self.exchange.fetch_funding_rate(symbol)
                 rate = data.get("fundingRate")
                 logger.debug("Funding rate for %s: %s", symbol, rate)
                 return rate
-        except ccxt.BaseError as exc:
+        except Exception as exc:
             logger.debug("Funding rate not available for %s: %s", symbol, exc)
         return None
 
