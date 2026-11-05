@@ -41,6 +41,23 @@ class RuntimeFixesTests(unittest.TestCase):
             self.assertFalse(notifier.send_message("hello"))
             self.assertEqual(mocked_post.call_count, 3)
 
+    def test_telegram_notifier_disables_after_invalid_token(self):
+        from notifications.telegram_notifier import TelegramNotifier
+
+        notifier = TelegramNotifier(token="12345678:abcdefgh", chat_id="12345")
+        response = Mock()
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "401 Unauthorized", response=response
+        )
+        response.status_code = 401
+        response.text = '{"ok":false,"description":"Unauthorized"}'
+        response.json.return_value = {"ok": False, "description": "Unauthorized"}
+
+        with patch("notifications.telegram_notifier.requests.post", return_value=response) as mocked_post:
+            self.assertFalse(notifier.send_message("hello"))
+            self.assertFalse(notifier.enabled)
+            self.assertEqual(mocked_post.call_count, 1)
+
     def test_telegram_notifier_uses_broadcast_channels_when_primary_missing(self):
         from notifications.telegram_notifier import TelegramNotifier
 

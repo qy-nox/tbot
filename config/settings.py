@@ -260,7 +260,7 @@ class Settings:
     MAX_DRAWDOWN: float = 0.10  # 10% max drawdown
     RISK_REWARD_RATIO: float = 2.0  # 1:2 minimum
     STOP_LOSS_ATR_MULTIPLIER: float = 1.5
-    TAKE_PROFIT_LEVELS: list = [1.0, 1.5, 2.0]  # TP1, TP2, TP3 as ATR multiples
+    TAKE_PROFIT_LEVELS: list = [1.0, 2.0, 3.0]  # TP1, TP2, TP3 as risk multiples
 
     # ── Portfolio ──────────────────────────────────────────────────────
     INITIAL_CAPITAL: float = 10000.0  # USD

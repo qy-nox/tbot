@@ -133,6 +133,9 @@ class TelegramNotifier:
                         # malformed HTML entity errors while keeping delivery resilient.
                         failed_response = resp
                         body = resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
+                        if self._is_authentication_error(resp):
+                            self._disable_after_authentication_failure()
+                            return False
                         if self._is_group_not_found_error(resp):
                             logger.error(
                                 "GROUP_NOT_FOUND: chat_id=%s is not accessible. "
@@ -170,6 +173,9 @@ class TelegramNotifier:
                             except requests.HTTPError:
                                 failed_response = fallback_resp
                                 body = fallback_resp.text[: self.ERROR_BODY_PREVIEW_LENGTH]
+                                if self._is_authentication_error(fallback_resp):
+                                    self._disable_after_authentication_failure()
+                                    return False
                                 if self._is_group_not_found_error(fallback_resp):
                                     logger.error(
                                         "GROUP_NOT_FOUND: chat_id=%s is not accessible. "
@@ -217,10 +223,45 @@ class TelegramNotifier:
         try:
             resp = requests.get(f"{self.api_url}/getMe", timeout=self.request_timeout)
             resp.raise_for_status()
+            try:
+                payload = resp.json() if resp.text else {}
+            except ValueError:
+                payload = {}
+            if isinstance(payload, dict) and payload.get("ok") is False:
+                if self._is_authentication_error(resp):
+                    self._disable_after_authentication_failure()
+                logger.error(
+                    "Telegram test_connection failed: %s",
+                    payload.get("description", "Telegram API rejected the request"),
+                )
+                return False
             return True
         except requests.RequestException as exc:
+            response = getattr(exc, "response", None)
+            if response is not None and self._is_authentication_error(response):
+                self._disable_after_authentication_failure()
             logger.error("Telegram test_connection failed: %s", exc)
             return False
+
+    @staticmethod
+    def _is_authentication_error(response: requests.Response) -> bool:
+        """Return True when Telegram rejected the bot token."""
+        if getattr(response, "status_code", None) == 401:
+            return True
+        try:
+            payload = response.json()
+        except (ValueError, AttributeError):
+            payload = {}
+        description = str((payload or {}).get("description", "")).lower()
+        return "unauthorized" in description or "invalid token" in description
+
+    def _disable_after_authentication_failure(self) -> None:
+        """Stop retrying until the operator supplies a valid bot token."""
+        self.enabled = False
+        logger.error(
+            "Telegram notifier disabled after authentication failure. "
+            "Create a new token with @BotFather and update TELEGRAM_BOT_TOKEN."
+        )
 
     # ── Signal alert ────────────────────────────────────────────────────
 
