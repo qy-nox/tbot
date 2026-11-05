@@ -191,7 +191,7 @@ class TradingBot:
             if not self.notifier.test_connection():
                 logger.warning(
                     "Telegram connectivity check failed on startup. "
-                    "Bot will continue and retry delivery with configured backoff."
+                    "Notifications are disabled until valid credentials are configured."
                 )
         for error in Settings.validate_startup_config():
             logger.warning("Startup config warning: %s", error)
@@ -474,22 +474,32 @@ class TradingBot:
         logger.info(
             "Bot running – scan interval %ds", Settings.SCAN_INTERVAL_SECONDS
         )
-        self.notifier.send_message("\u2705 <b>Trading Bot started</b>")
+        try:
+            self.notifier.send_message("\u2705 <b>Trading Bot started</b>")
+            while True:
+                try:
+                    self.run_scan()
+                except KeyboardInterrupt:
+                    break
+                except Exception:
+                    logger.exception("Unexpected error in scan cycle")
 
-        while True:
-            try:
-                self.run_scan()
-            except KeyboardInterrupt:
-                logger.info("Shutdown requested")
-                self.notifier.send_message("\U0001f6d1 <b>Trading Bot stopped</b>")
-                break
-            except Exception:
-                logger.exception("Unexpected error in scan cycle")
-
-            logger.info(
-                "Sleeping %ds until next scan …", Settings.SCAN_INTERVAL_SECONDS
-            )
-            time.sleep(Settings.SCAN_INTERVAL_SECONDS)
+                logger.info(
+                    "Sleeping %ds until next scan …", Settings.SCAN_INTERVAL_SECONDS
+                )
+                try:
+                    time.sleep(Settings.SCAN_INTERVAL_SECONDS)
+                except KeyboardInterrupt:
+                    break
+        except KeyboardInterrupt:
+            pass
+        finally:
+            logger.info("Shutdown requested")
+            if self.notifier.enabled:
+                try:
+                    self.notifier.send_message("\U0001f6d1 <b>Trading Bot stopped</b>")
+                except KeyboardInterrupt:
+                    logger.info("Shutdown interrupted while sending Telegram notification")
 
     # ── Database helper ─────────────────────────────────────────────────
 
