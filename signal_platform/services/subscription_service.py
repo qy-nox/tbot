@@ -151,7 +151,7 @@ class SubscriptionService:
         payment_id: int,
         provider_tx_id: str,
     ) -> Payment:
-        payment = db.query(Payment).get(payment_id)
+        payment = db.get(Payment, payment_id)
         if payment is None:
             raise ValueError("Payment not found")
 
@@ -159,7 +159,7 @@ class SubscriptionService:
         payment.provider_tx_id = provider_tx_id
 
         # Upgrade user tier
-        user = db.query(User).get(payment.user_id)
+        user = db.get(User, payment.user_id)
         if user and payment.subscription_tier:
             user.subscription_tier = payment.subscription_tier
 

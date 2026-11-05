@@ -119,7 +119,7 @@ class DataFetcher:
                 )
                 validate_required_columns(df.columns, ("timestamp", "open", "high", "low", "close", "volume"))
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-                df.set_index("timestamp", inplace=True)
+                df = df.set_index("timestamp")
                 df = df.astype(float)
                 if not self._validate_ohlcv_data(df):
                     logger.warning("Invalid OHLCV data for %s (%s)", symbol, timeframe)
