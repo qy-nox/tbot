@@ -216,6 +216,24 @@ class RuntimeFixesTests(unittest.TestCase):
                         platform_init.assert_called_once()
                         uvicorn_run.assert_not_called()
 
+    def test_platform_tables_are_initialized_with_bot_startup(self):
+        from main import TradingBot
+
+        with patch("main.DataFetcher") as data_fetcher, \
+                patch("main.TelegramNotifier") as notifier, \
+                patch("main.init_db") as trading_init, \
+                patch("signal_platform.models.init_db") as platform_init, \
+                patch("main.Settings.validate_startup_config", return_value=[]), \
+                patch("main.Settings.configured_signal_group_ids", return_value=[]), \
+                patch("main.Settings.valid_signal_group_ids", return_value=[]), \
+                patch("main.Settings.ML_ENABLED", False):
+            notifier.return_value.enabled = False
+            data_fetcher.return_value = Mock()
+            TradingBot()
+
+        trading_init.assert_called_once()
+        platform_init.assert_called_once()
+
     def test_release_port_does_not_kill_when_force_kill_disabled(self):
         from main import _release_port_if_needed
 

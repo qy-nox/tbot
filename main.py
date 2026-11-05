@@ -226,6 +226,11 @@ class TradingBot:
                 logger.warning("ML dependencies not installed – ML engine disabled")
 
         init_db()
+        # The platform uses a separate SQLAlchemy metadata registry even
+        # though it normally points at the same database URL.
+        from signal_platform.models import init_db as init_platform_db
+
+        init_platform_db()
         logger.info("Database initialised")
 
     # ── Single scan cycle ───────────────────────────────────────────────
