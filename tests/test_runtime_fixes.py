@@ -332,6 +332,11 @@ class RuntimeFixesTests(unittest.TestCase):
             )
         )
 
+    def test_fallback_signals_are_disabled_by_default(self):
+        from config.settings import Settings
+
+        self.assertFalse(Settings.ALLOW_FALLBACK_SIGNALS)
+
 
 if __name__ == "__main__":
     unittest.main()

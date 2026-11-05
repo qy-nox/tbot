@@ -101,15 +101,21 @@ class StrategyEngine:
             )
             return None
 
+        if direction not in {"BUY", "SELL"}:
+            return None
+
         # Apply filters
-        if not self._apply_filters(analysis, sentiment):
+        if not self._apply_filters(analysis, sentiment, direction):
             logger.debug("%s: filtered out", pair)
             return None
 
         # Build signal levels
         entry = analysis["close"]
-        effective_atr = atr if atr else (analysis.get("atr") or 0)
+        effective_atr = atr if atr is not None else (analysis.get("atr") or 0)
         sl_dist = effective_atr * Settings.STOP_LOSS_ATR_MULTIPLIER
+        if not self._is_finite_positive(sl_dist):
+            logger.debug("%s: invalid ATR/stop distance", pair)
+            return None
 
         if direction == "BUY":
             sl = entry - sl_dist
@@ -165,9 +171,9 @@ class StrategyEngine:
         if line is None or sig is None:
             return None, ""
         if line > sig:
-            return "BUY", "MACD bullish crossover"
+            return "BUY", "MACD bullish momentum"
         if line < sig:
-            return "SELL", "MACD bearish crossover"
+            return "SELL", "MACD bearish momentum"
         return None, ""
 
     def _ema_strategy(self, a: dict) -> tuple[str | None, str]:
@@ -212,7 +218,10 @@ class StrategyEngine:
     # ── Filters ─────────────────────────────────────────────────────────
 
     def _apply_filters(
-        self, analysis: dict, sentiment: SentimentResult | None
+        self,
+        analysis: dict,
+        sentiment: SentimentResult | None,
+        direction: str | None = None,
     ) -> bool:
         f = self.filters
 
@@ -241,6 +250,47 @@ class StrategyEngine:
                 logger.debug("ADX filter: ADX=%.1f < %d", adx, f["min_adx"])
                 return False
 
+        if f.get("momentum_filter") and direction in {"BUY", "SELL"}:
+            rsi = analysis.get("rsi")
+            macd_hist = analysis.get("macd_histogram")
+            if rsi is not None:
+                if direction == "BUY" and rsi >= 70:
+                    logger.debug("Momentum filter: BUY is overbought (RSI=%.1f)", rsi)
+                    return False
+                if direction == "SELL" and rsi <= 30:
+                    logger.debug("Momentum filter: SELL is oversold (RSI=%.1f)", rsi)
+                    return False
+            if macd_hist is not None:
+                if direction == "BUY" and macd_hist < 0:
+                    logger.debug("Momentum filter: BUY has bearish MACD histogram")
+                    return False
+                if direction == "SELL" and macd_hist > 0:
+                    logger.debug("Momentum filter: SELL has bullish MACD histogram")
+                    return False
+
+        if f.get("volatility_filter"):
+            close = analysis.get("close")
+            atr = analysis.get("atr")
+            if close is None or atr is None or close <= 0 or atr <= 0:
+                logger.debug("Volatility filter: missing or invalid ATR")
+                return False
+            volatility_pct = float(atr) / float(close) * 100
+            if not (
+                f.get("min_volatility_pct", 0.0)
+                <= volatility_pct
+                <= f.get("max_volatility_pct", float("inf"))
+            ):
+                logger.debug(
+                    "Volatility filter: ATR volatility %.3f%% outside limits",
+                    volatility_pct,
+                )
+                return False
+
+        anomaly = analysis.get("anomaly_detection") or {}
+        if anomaly.get("is_anomaly"):
+            logger.debug("Price anomaly filter: abnormal price movement")
+            return False
+
         # News / sentiment filter
         if f.get("news_filter") and sentiment is not None:
             if sentiment.impact == "HIGH" and sentiment.label == "BEARISH":
@@ -248,3 +298,7 @@ class StrategyEngine:
                 return False
 
         return True
+
+    @staticmethod
+    def _is_finite_positive(value: float) -> bool:
+        return bool(value > 0 and value == value and value not in (float("inf"), float("-inf")))

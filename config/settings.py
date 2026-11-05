@@ -251,6 +251,9 @@ class Settings:
     # ── Signal Thresholds ──────────────────────────────────────────────
     MIN_SIGNAL_CONFIDENCE: float = 0.6  # 60% minimum confidence
     MIN_INDICATORS_AGREE: int = 2  # At least 2 out of 3 must agree
+    ALLOW_FALLBACK_SIGNALS: bool = (
+        os.getenv("ALLOW_FALLBACK_SIGNALS", "false").lower() == "true"
+    )
 
     # ── Risk Management ────────────────────────────────────────────────
     MAX_TRADES_PER_DAY: int = int(os.getenv("MAX_TRADES_PER_DAY", "5"))
@@ -274,6 +277,7 @@ class Settings:
         "news_filter": True,
         "min_adx": 20,
         "max_volatility_pct": 5.0,
+        "min_volatility_pct": 0.05,
     }
 
     # ── Backtesting ────────────────────────────────────────────────────

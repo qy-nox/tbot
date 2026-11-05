@@ -303,12 +303,15 @@ class TradingBot:
             sentiment=sentiment_result,
             atr=analysis.get("atr"),
         )
-        if signal is None:
+        if signal is None and Settings.ALLOW_FALLBACK_SIGNALS:
             signal = self._fallback_signal(pair, analysis)
             if signal is None:
                 logger.info("%s: no signal", pair)
                 return
             logger.info("%s: fallback signal generated", pair)
+        elif signal is None:
+            logger.info("%s: no high-confidence consensus signal", pair)
+            return
 
         # Apply MTF alignment boost
         if mtf_result and mtf_result.alignment == "ALIGNED":
